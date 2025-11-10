@@ -142,13 +142,11 @@ export function EventCalendar({
   };
 
   const handleEventSelect = (event: CalendarEvent) => {
-    console.log("Event selected:", event); // Debug log
     setSelectedEvent(event);
     setIsEventDialogOpen(true);
   };
 
   const handleEventCreate = (startTime: Date) => {
-    console.log("Creating new event at:", startTime); // Debug log
 
     // Snap to 15-minute intervals
     const minutes = startTime.getMinutes();
@@ -175,25 +173,86 @@ export function EventCalendar({
     setSelectedEvent(newEvent);
     setIsEventDialogOpen(true);
   };
+  function generateRecurringEvents(
+    baseEvent: CalendarEvent,
+    recurrenceData: {
+      selectedDays: number[];
+      recurrenceEndDate: Date;
+    }
+  ): CalendarEvent[] {
+    const events: CalendarEvent[] = [];
+    const startDate = new Date(baseEvent.start);
+    const endDate = new Date(baseEvent.end);
+    const duration = endDate.getTime() - startDate.getTime();
 
-  const handleEventSave = (event: CalendarEvent) => {
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= recurrenceData.recurrenceEndDate) {
+      const dayOfWeek = currentDate.getDay();
+
+      if (recurrenceData.selectedDays.includes(dayOfWeek)) {
+        const eventStart = new Date(currentDate);
+        eventStart.setHours(startDate.getHours());
+        eventStart.setMinutes(startDate.getMinutes());
+        eventStart.setSeconds(0);
+        eventStart.setMilliseconds(0);
+
+        const eventEnd = new Date(eventStart.getTime() + duration);
+
+        events.push({
+          ...baseEvent,
+          start: eventStart,
+          end: eventEnd,
+        });
+      }
+
+      // Move to next day
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return events;
+  }
+
+  const handleEventSave = (
+    event: CalendarEvent,
+    recurrenceData?: {
+      isRecurring: boolean;
+      selectedDays: number[];
+      recurrenceEndDate: Date;
+    }
+  ) => {
     if (event.id) {
+      // Update existing event
       onEventUpdate?.(event);
-      // Show toast notification when an event is updated
       toast(`Event "${event.title}" updated`, {
         description: format(new Date(event.start), "MMM d, yyyy"),
         position: "bottom-left",
       });
     } else {
-      onEventAdd?.({
-        ...event,
-        id: Math.random().toString(36).substring(2, 11),
-      });
-      // Show toast notification when an event is added
-      toast(`Event "${event.title}" added`, {
-        description: format(new Date(event.start), "MMM d, yyyy"),
-        position: "bottom-left",
-      });
+      if (recurrenceData?.isRecurring) {
+        // Generate multiple events for each occurrence
+        const events = generateRecurringEvents(event, recurrenceData);
+        events.forEach((evt) => {
+          onEventAdd?.({
+            ...evt,
+            id: Math.random().toString(36).substring(2, 11),
+          });
+        });
+        toast(`${events.length} recurring events created`, {
+          description: `${format(new Date(event.start), "MMM d, yyyy")} - ${format(recurrenceData.recurrenceEndDate, "MMM d, yyyy")}`,
+          position: "bottom-left",
+        });
+      } else {
+        // Single event
+        onEventAdd?.({
+          ...event,
+          id: Math.random().toString(36).substring(2, 11),
+        });
+        toast(`Event "${event.title}" added`, {
+          description: format(new Date(event.start), "MMM d, yyyy"),
+          position: "bottom-left",
+        });
+      }
     }
     setIsEventDialogOpen(false);
     setSelectedEvent(null);

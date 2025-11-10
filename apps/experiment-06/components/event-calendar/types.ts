@@ -7,9 +7,17 @@ export interface CalendarEvent {
   start: Date;
   end: Date;
   allDay?: boolean;
-  color?: EventColor;
+  color?: string;
   label?: string;
   location?: string;
 }
 
-export type EventColor = "blue" | "orange" | "violet" | "rose" | "emerald";
+// New interface for subjects
+export interface Subject {
+  id: string;
+  name: string;
+  color: string;
+  isActive: boolean;
+}
+
+export type EventColor = string;

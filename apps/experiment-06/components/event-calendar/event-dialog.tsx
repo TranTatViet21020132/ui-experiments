@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { RiCalendarLine, RiDeleteBinLine } from "@remixicon/react";
 import { format, isBefore } from "date-fns";
 
@@ -39,6 +39,12 @@ import {
   DefaultStartHour,
   DefaultEndHour,
 } from "@/components/event-calendar/constants";
+import {
+  useCreateSubject,
+  useDeleteSubject,
+  useSubjects,
+} from "@/hooks/use-subjects";
+import { Plus, X, Check } from "lucide-react";
 
 interface EventDialogProps {
   event: CalendarEvent | null;
@@ -55,47 +61,30 @@ interface EventDialogProps {
   onDelete: (eventId: string) => void;
 }
 
-// Move color options outside component to prevent recreation
-const colorOptions: Array<{
-  value: EventColor;
-  label: string;
-  bgClass: string;
-  borderClass: string;
-}> = [
-  {
-    value: "blue",
-    label: "Blue",
-    bgClass: "bg-blue-400 data-[state=checked]:bg-blue-400",
-    borderClass: "border-blue-400 data-[state=checked]:border-blue-400",
-  },
-  {
-    value: "violet",
-    label: "Violet",
-    bgClass: "bg-violet-400 data-[state=checked]:bg-violet-400",
-    borderClass: "border-violet-400 data-[state=checked]:border-violet-400",
-  },
-  {
-    value: "rose",
-    label: "Rose",
-    bgClass: "bg-rose-400 data-[state=checked]:bg-rose-400",
-    borderClass: "border-rose-400 data-[state=checked]:border-rose-400",
-  },
-  {
-    value: "emerald",
-    label: "Emerald",
-    bgClass: "bg-emerald-400 data-[state=checked]:bg-emerald-400",
-    borderClass: "border-emerald-400 data-[state=checked]:border-emerald-400",
-  },
-  {
-    value: "orange",
-    label: "Orange",
-    bgClass: "bg-orange-400 data-[state=checked]:bg-orange-400",
-    borderClass: "border-orange-400 data-[state=checked]:border-orange-400",
-  },
+// Preset colors for quick selection
+const PRESET_COLORS = [
+  { value: "#EF4444", label: "Red" },
+  { value: "#F97316", label: "Orange" },
+  { value: "#F59E0B", label: "Amber" },
+  { value: "#EAB308", label: "Yellow" },
+  { value: "#84CC16", label: "Lime" },
+  { value: "#22C55E", label: "Green" },
+  { value: "#10B981", label: "Emerald" },
+  { value: "#14B8A6", label: "Teal" },
+  { value: "#06B6D4", label: "Cyan" },
+  { value: "#0EA5E9", label: "Sky" },
+  { value: "#3B82F6", label: "Blue" },
+  { value: "#6366F1", label: "Indigo" },
+  { value: "#8B5CF6", label: "Violet" },
+  { value: "#A855F7", label: "Purple" },
+  { value: "#D946EF", label: "Fuchsia" },
+  { value: "#EC4899", label: "Pink" },
+  { value: "#F43F5E", label: "Rose" },
+  { value: "#64748B", label: "Slate" },
 ];
 
 // Generate time options once at module level
-const generateTimeOptions = () => {
+const timeOptions = (() => {
   const options = [];
   for (let hour = StartHour; hour <= EndHour; hour++) {
     for (let minute = 0; minute < 60; minute += 15) {
@@ -108,9 +97,19 @@ const generateTimeOptions = () => {
     }
   }
   return options;
-};
+})();
 
-const timeOptions = generateTimeOptions();
+const DURATION_OPTIONS = [
+  { value: "30", label: "30 minutes" },
+  { value: "45", label: "45 minutes" },
+  { value: "60", label: "1 hour" },
+  { value: "90", label: "1.5 hours" },
+  { value: "120", label: "2 hours" },
+  { value: "150", label: "2.5 hours" },
+  { value: "180", label: "3 hours" },
+];
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Memoized TimeSelect component
 const TimeSelect = memo(
@@ -207,6 +206,167 @@ const DatePicker = memo(
 
 DatePicker.displayName = "DatePicker";
 
+// Memoized DaySelector component
+const DaySelector = memo(
+  ({
+    selectedDays,
+    onToggleDay,
+  }: {
+    selectedDays: number[];
+    onToggleDay: (index: number) => void;
+  }) => (
+    <div className="flex gap-2 flex-wrap mt-2">
+      {DAYS.map((day, index) => (
+        <Button
+          key={day}
+          type="button"
+          variant={selectedDays.includes(index) ? "default" : "outline"}
+          size="sm"
+          onClick={() => onToggleDay(index)}
+        >
+          {day}
+        </Button>
+      ))}
+    </div>
+  )
+);
+
+DaySelector.displayName = "DaySelector";
+
+// Memoized ColorPicker component
+const ColorPicker = memo(
+  ({
+    selectedColor,
+    onColorChange,
+  }: {
+    selectedColor: string;
+    onColorChange: (color: string) => void;
+  }) => {
+    const [customColor, setCustomColor] = useState(selectedColor);
+
+    useEffect(() => {
+      setCustomColor(selectedColor);
+    }, [selectedColor]);
+
+    return (
+      <div className="space-y-3">
+        {/* Preset Colors */}
+        <div className="grid grid-cols-9 gap-2">
+          {PRESET_COLORS.map((color) => (
+            <button
+              key={color.value}
+              type="button"
+              onClick={() => onColorChange(color.value)}
+              className={cn(
+                "size-8 rounded-md border-2 transition-all hover:scale-110",
+                selectedColor === color.value
+                  ? "border-foreground ring-2 ring-offset-2 ring-foreground"
+                  : "border-transparent"
+              )}
+              style={{ backgroundColor: color.value }}
+              aria-label={color.label}
+              title={color.label}
+            >
+              {selectedColor === color.value && (
+                <Check className="h-4 w-4 text-white mx-auto drop-shadow-md" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom Color Picker */}
+        <div className="flex gap-2 items-center pt-2 border-t">
+          <Label htmlFor="custom-color" className="text-sm">
+            Custom:
+          </Label>
+          <div className="flex gap-2 flex-1">
+            <Input
+              id="custom-color"
+              type="color"
+              value={customColor}
+              onChange={(e) => {
+                setCustomColor(e.target.value);
+                onColorChange(e.target.value);
+              }}
+              className="w-16 h-9 cursor-pointer"
+            />
+            <Input
+              type="text"
+              value={customColor}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCustomColor(value);
+                if (/^#[0-9A-F]{6}$/i.test(value)) {
+                  onColorChange(value);
+                }
+              }}
+              placeholder="#3B82F6"
+              className="flex-1 font-mono text-sm"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+);
+
+ColorPicker.displayName = "ColorPicker";
+
+// Memoized SubjectManager component
+const SubjectManager = memo(
+  ({
+    subjects,
+    selectedColor,
+    onColorChange,
+    onDeleteSubject,
+  }: {
+    subjects: any[];
+    selectedColor: string;
+    onColorChange: (color: string) => void;
+    onDeleteSubject: (id: string) => void;
+  }) => (
+    <RadioGroup
+      className="flex flex-wrap gap-3"
+      value={selectedColor}
+      onValueChange={onColorChange}
+    >
+      {subjects.map((subject) => (
+        <div key={subject.id} className="relative group">
+          <div className="flex flex-col items-center gap-1">
+            <RadioGroupItem
+              id={`color-${subject.id}`}
+              value={subject.color}
+              aria-label={subject.name}
+              className="size-10 shadow-sm border-2 transition-all hover:scale-105"
+              style={{
+                backgroundColor: subject.color,
+                borderColor: subject.color,
+              }}
+            />
+            <span className="text-xs text-center max-w-[60px] truncate">
+              {subject.name}
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute -top-1 -right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full shadow-sm"
+            onClick={(e) => {
+              e.preventDefault();
+              onDeleteSubject(subject.id);
+            }}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+    </RadioGroup>
+  )
+);
+
+SubjectManager.displayName = "SubjectManager";
+
 export function EventDialog({
   event,
   isOpen,
@@ -214,6 +374,7 @@ export function EventDialog({
   onSave,
   onDelete,
 }: EventDialogProps) {
+  // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState<Date>(new Date());
@@ -222,16 +383,31 @@ export function EventDialog({
   const [endTime, setEndTime] = useState(`${DefaultEndHour}:00`);
   const [allDay, setAllDay] = useState(false);
   const [location, setLocation] = useState("");
-  const [color, setColor] = useState<EventColor>("blue");
+  const [color, setColor] = useState<EventColor>("#3B82F6");
   const [error, setError] = useState<string | null>(null);
+
+  // UI state
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
+  const [recurrenceEndDateOpen, setRecurrenceEndDateOpen] = useState(false);
 
+  // Recurring event state
   const [duration, setDuration] = useState("60");
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceEndDate, setRecurrenceEndDate] = useState<Date | undefined>();
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<
+    Date | undefined
+  >();
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [recurrenceEndDateOpen, setRecurrenceEndDateOpen] = useState(false);
+
+  // Subject management state
+  const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectColor, setNewSubjectColor] = useState("#3B82F6");
+
+  // Fetch subjects from database
+  const { data: subjects = [] } = useSubjects();
+  const createSubject = useCreateSubject();
+  const deleteSubject = useDeleteSubject();
 
   const formatTimeForInput = useCallback((date: Date) => {
     const hours = date.getHours().toString().padStart(2, "0");
@@ -248,7 +424,7 @@ export function EventDialog({
     setEndTime(`${DefaultEndHour}:00`);
     setAllDay(false);
     setLocation("");
-    setColor("blue");
+    setColor("#3B82F6");
     setError(null);
     setDuration("60");
     setIsRecurring(false);
@@ -256,22 +432,25 @@ export function EventDialog({
     setSelectedDays([]);
   }, []);
 
+  // Initialize form when dialog opens
   useEffect(() => {
-    if (isOpen && event) {
-      setTitle(event.title || "");
-      setDescription(event.description || "");
-      const start = new Date(event.start);
-      const end = new Date(event.end);
-      setStartDate(start);
-      setEndDate(end);
-      setStartTime(formatTimeForInput(start));
-      setEndTime(formatTimeForInput(end));
-      setAllDay(event.allDay || false);
-      setLocation(event.location || "");
-      setColor((event.color as EventColor) || "sky");
+    if (isOpen) {
+      if (event) {
+        setTitle(event.title || "");
+        setDescription(event.description || "");
+        const start = new Date(event.start);
+        const end = new Date(event.end);
+        setStartDate(start);
+        setEndDate(end);
+        setStartTime(formatTimeForInput(start));
+        setEndTime(formatTimeForInput(end));
+        setAllDay(event.allDay || false);
+        setLocation(event.location || "");
+        setColor(event.color || "#3B82F6");
+      } else {
+        resetForm();
+      }
       setError(null);
-    } else if (isOpen && !event) {
-      resetForm();
     }
   }, [isOpen, event, formatTimeForInput, resetForm]);
 
@@ -280,7 +459,9 @@ export function EventDialog({
     let end = new Date(endDate);
 
     if (!allDay) {
-      const [startHours = 0, startMinutes = 0] = startTime.split(":").map(Number);
+      const [startHours = 0, startMinutes = 0] = startTime
+        .split(":")
+        .map(Number);
 
       if (startHours < StartHour || startHours > EndHour) {
         setError(
@@ -292,11 +473,9 @@ export function EventDialog({
       start.setHours(startHours, startMinutes, 0);
 
       if (isRecurring) {
-        // For recurring events, calculate end from duration
         end = new Date(start);
         end.setMinutes(end.getMinutes() + parseInt(duration));
       } else {
-        // For single events, use the end date/time fields
         const [endHours = 0, endMinutes = 0] = endTime.split(":").map(Number);
 
         if (endHours < StartHour || endHours > EndHour) {
@@ -318,7 +497,6 @@ export function EventDialog({
       return;
     }
 
-    // Validate recurring event settings
     if (isRecurring) {
       if (selectedDays.length === 0) {
         setError("Please select at least one day for recurring events");
@@ -334,7 +512,13 @@ export function EventDialog({
       }
     }
 
-    const eventTitle = title.trim() ? title : "(no title)";
+    // Determine the title to use
+    let eventTitle = title.trim();
+    if (!eventTitle) {
+      // Find the subject with matching color
+      const matchingSubject = subjects.find((s) => s.color === color);
+      eventTitle = matchingSubject ? matchingSubject.name : "(no title)";
+    }
 
     const eventData = {
       id: event?.id || "",
@@ -371,6 +555,7 @@ export function EventDialog({
     selectedDays,
     recurrenceEndDate,
     duration,
+    subjects,
     onSave,
   ]);
 
@@ -396,9 +581,51 @@ export function EventDialog({
     setError(null);
   }, []);
 
+  const handleToggleDay = useCallback((index: number) => {
+    setSelectedDays((prev) =>
+      prev.includes(index)
+        ? prev.filter((d) => d !== index)
+        : [...prev, index].sort()
+    );
+  }, []);
+
+  const handleAddSubject = useCallback(async () => {
+    if (newSubjectName.trim()) {
+      try {
+        await createSubject.mutateAsync({
+          name: newSubjectName.trim(),
+          color: newSubjectColor,
+          isActive: true,
+        });
+        setNewSubjectName("");
+        setNewSubjectColor("#3B82F6");
+        setIsAddingSubject(false);
+      } catch (error) {
+        console.error("Failed to create subject:", error);
+      }
+    }
+  }, [newSubjectName, newSubjectColor, createSubject]);
+
+  const handleDeleteSubject = useCallback(
+    async (subjectId: string) => {
+      try {
+        await deleteSubject.mutateAsync(subjectId);
+      } catch (error) {
+        console.error("Failed to delete subject:", error);
+      }
+    },
+    [deleteSubject]
+  );
+
+  const handleCancelAddSubject = useCallback(() => {
+    setIsAddingSubject(false);
+    setNewSubjectName("");
+    setNewSubjectColor("#3B82F6");
+  }, []);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{event?.id ? "Edit Event" : "Create Event"}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -407,19 +634,82 @@ export function EventDialog({
               : "Add a new event to your calendar"}
           </DialogDescription>
         </DialogHeader>
+
         {error && (
           <div className="bg-destructive/15 text-destructive rounded-md px-3 py-2 text-sm">
             {error}
           </div>
         )}
+
         <div className="grid gap-4 py-4">
-          {/* Title */}
+          {/* Subject Management - Moved to top */}
+          <fieldset className="space-y-3">
+            <div className="flex items-center justify-between">
+              <legend className="text-foreground text-sm leading-none font-medium">
+                Subject
+              </legend>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAddingSubject(true)}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Subject
+              </Button>
+            </div>
+
+            {isAddingSubject && (
+              <div className="space-y-3 p-3 border rounded-md bg-muted/30">
+                <Input
+                  placeholder="Subject name (e.g., Mathematics)"
+                  value={newSubjectName}
+                  onChange={(e) => setNewSubjectName(e.target.value)}
+                />
+                <ColorPicker
+                  selectedColor={newSubjectColor}
+                  onColorChange={setNewSubjectColor}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleAddSubject}
+                    className="flex-1"
+                  >
+                    Add Subject
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelAddSubject}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <SubjectManager
+              subjects={subjects}
+              selectedColor={color}
+              onColorChange={setColor}
+              onDeleteSubject={handleDeleteSubject}
+            />
+          </fieldset>
+
+          {/* Title - Now optional */}
           <div className="*:not-first:mt-1.5">
-            <Label htmlFor="title">Title</Label>
+            <Label htmlFor="title" className="flex items-center gap-2">
+              Title
+              <span className="text-xs text-muted-foreground font-normal">
+                (optional - uses subject name if empty)
+              </span>
+            </Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter event title"
             />
           </div>
 
@@ -431,6 +721,7 @@ export function EventDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
+              placeholder="Add event details..."
             />
           </div>
 
@@ -454,7 +745,7 @@ export function EventDialog({
             )}
           </div>
 
-          {/* Conditionally show End Date/Time OR Duration */}
+          {/* End Date/Time OR Duration */}
           {!isRecurring && (
             <div className="flex gap-4">
               <DatePicker
@@ -485,13 +776,11 @@ export function EventDialog({
                   <SelectValue placeholder="Select duration" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="45">45 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                  <SelectItem value="90">1.5 hours</SelectItem>
-                  <SelectItem value="120">2 hours</SelectItem>
-                  <SelectItem value="150">2.5 hours</SelectItem>
-                  <SelectItem value="180">3 hours</SelectItem>
+                  {DURATION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -514,6 +803,7 @@ export function EventDialog({
               id="location"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
+              placeholder="Add location"
             />
           </div>
 
@@ -523,7 +813,9 @@ export function EventDialog({
               <Checkbox
                 id="recurring"
                 checked={isRecurring}
-                onCheckedChange={(checked) => setIsRecurring(checked as boolean)}
+                onCheckedChange={(checked) =>
+                  setIsRecurring(checked as boolean)
+                }
               />
               <Label htmlFor="recurring">Repeat weekly</Label>
             </div>
@@ -532,29 +824,10 @@ export function EventDialog({
               <>
                 <div className="space-y-2 mt-2">
                   <Label>Repeat on</Label>
-                  <div className="flex gap-2 flex-wrap mt-2">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (day, index) => (
-                        <Button
-                          key={day}
-                          type="button"
-                          variant={
-                            selectedDays.includes(index) ? "default" : "outline"
-                          }
-                          size="sm"
-                          onClick={() => {
-                            setSelectedDays((prev) =>
-                              prev.includes(index)
-                                ? prev.filter((d) => d !== index)
-                                : [...prev, index].sort()
-                            );
-                          }}
-                        >
-                          {day}
-                        </Button>
-                      )
-                    )}
-                  </div>
+                  <DaySelector
+                    selectedDays={selectedDays}
+                    onToggleDay={handleToggleDay}
+                  />
                 </div>
 
                 <div className="flex-1 *:not-first:mt-1.5">
@@ -608,32 +881,6 @@ export function EventDialog({
               </>
             )}
           </div>
-
-          {/* Etiquette/Color */}
-          <fieldset className="space-y-4">
-            <legend className="text-foreground text-sm leading-none font-medium">
-              Etiquette
-            </legend>
-            <RadioGroup
-              className="flex gap-1.5"
-              value={color}
-              onValueChange={(value: EventColor) => setColor(value)}
-            >
-              {colorOptions.map((colorOption) => (
-                <RadioGroupItem
-                  key={colorOption.value}
-                  id={`color-${colorOption.value}`}
-                  value={colorOption.value}
-                  aria-label={colorOption.label}
-                  className={cn(
-                    "size-6 shadow-none",
-                    colorOption.bgClass,
-                    colorOption.borderClass
-                  )}
-                />
-              ))}
-            </RadioGroup>
-          </fieldset>
         </div>
 
         <DialogFooter className="flex-row sm:justify-between">

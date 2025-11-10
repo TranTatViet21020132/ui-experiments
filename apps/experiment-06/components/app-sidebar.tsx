@@ -4,8 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { RiCheckLine } from "@remixicon/react";
 import { useCalendarContext } from "@/components/event-calendar/calendar-context";
-import { etiquettes } from "@/components/big-calendar";
-
 import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
@@ -22,18 +20,21 @@ import {
 } from "@/components/ui/sidebar";
 import SidebarCalendar from "@/components/sidebar-calendar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSubjects } from "@/hooks/use-subjects";
 
 const data = {
   user: {
-    name: "Sofia Safier",
-    email: "sofia@safier.com",
+    name: "Giang thúi",
+    email: "giang@thui.com",
     avatar:
-      "https://raw.githubusercontent.com/origin-space/origin-images/refs/heads/main/exp6/user-01_l4if9t.png",
+      "",
   },
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isColorVisible, toggleColorVisibility } = useCalendarContext();
+  const { data: subjects = [], isLoading } = useSubjects();
+
   return (
     <Sidebar
       variant="inset"
@@ -63,60 +64,66 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarTrigger className="text-muted-foreground/80 hover:text-foreground/80 hover:bg-transparent!" />
         </div>
       </SidebarHeader>
+
       <SidebarContent className="gap-0 mt-3 pt-3 border-t">
+        {/* Mini Calendar */}
         <SidebarGroup className="px-1">
           <SidebarCalendar />
         </SidebarGroup>
+
+        {/* Dynamic Subjects List */}
         <SidebarGroup className="px-1 mt-3 pt-4 border-t">
           <SidebarGroupLabel className="uppercase text-muted-foreground/65">
             Calendars
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {etiquettes.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    asChild
-                    className="relative rounded-md [&>svg]:size-auto justify-between has-focus-visible:border-ring has-focus-visible:ring-ring/50 has-focus-visible:ring-[3px]"
-                  >
-                    <span>
-                      <span className="font-medium flex items-center justify-between gap-3">
-                        <Checkbox
-                          id={item.id}
-                          className="sr-only peer"
-                          checked={isColorVisible(item.color)}
-                          onCheckedChange={() =>
-                            toggleColorVisibility(item.color)
-                          }
+              {isLoading ? (
+                <div className="text-muted-foreground text-sm px-2">
+                  Loading...
+                </div>
+              ) : (
+                subjects.map((subject: any) => (
+                  <SidebarMenuItem key={subject.id}>
+                    <SidebarMenuButton
+                      asChild
+                      className="relative rounded-md justify-between"
+                    >
+                      <span>
+                        <span className="font-medium flex items-center gap-3">
+                          <Checkbox
+                            id={subject.id}
+                            className="sr-only peer"
+                            checked={isColorVisible(subject.color)}
+                            onCheckedChange={() =>
+                              toggleColorVisibility(subject.color)
+                            }
+                          />
+                          <RiCheckLine
+                            className="peer-not-data-[state=checked]:invisible"
+                            size={16}
+                          />
+                          <label
+                            htmlFor={subject.id}
+                            className="peer-not-data-[state=checked]:line-through peer-not-data-[state=checked]:text-muted-foreground/65"
+                          >
+                            {subject.name}
+                          </label>
+                        </span>
+                        <span
+                          className="size-1.5 rounded-full"
+                          style={{ backgroundColor: subject.color }}
                         />
-                        <RiCheckLine
-                          className="peer-not-data-[state=checked]:invisible"
-                          size={16}
-                          aria-hidden="true"
-                        />
-                        <label
-                          htmlFor={item.id}
-                          className="peer-not-data-[state=checked]:line-through peer-not-data-[state=checked]:text-muted-foreground/65 after:absolute after:inset-0"
-                        >
-                          {item.name}
-                        </label>
                       </span>
-                      <span
-                        className="size-1.5 rounded-full bg-(--event-color)"
-                        style={
-                          {
-                            "--event-color": `var(--color-${item.color}-400)`,
-                          } as React.CSSProperties
-                        }
-                      ></span>
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>

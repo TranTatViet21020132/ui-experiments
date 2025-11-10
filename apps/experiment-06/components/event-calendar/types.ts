@@ -7,16 +7,16 @@ export interface CalendarEvent {
   start: Date;
   end: Date;
   allDay?: boolean;
-  color?: string;
+  color?: string; // Changed from EventColor to string for hex colors
   label?: string;
   location?: string;
 }
 
-// New interface for subjects
+// New Subject interface
 export interface Subject {
   id: string;
   name: string;
-  color: string;
+  color: string; // hex color like "#3B82F6"
   isActive: boolean;
 }
 

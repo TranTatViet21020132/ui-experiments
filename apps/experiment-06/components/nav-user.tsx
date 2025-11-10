@@ -40,7 +40,7 @@ export function NavUser({
             >
               <Avatar className="size-8">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">S</AvatarFallback>
+                <AvatarFallback className="rounded-lg">G</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -62,20 +62,20 @@ export function NavUser({
                 />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-3 focus:bg-sidebar-accent">
+              {/* <DropdownMenuItem className="gap-3 focus:bg-sidebar-accent">
                 <RiGroupLine
                   size={20}
                   className="size-5 text-muted-foreground/80"
                 />
                 Accounts
-              </DropdownMenuItem>
-              <DropdownMenuItem className="gap-3 focus:bg-sidebar-accent">
+              </DropdownMenuItem> */}
+              {/* <DropdownMenuItem className="gap-3 focus:bg-sidebar-accent">
                 <RiSparklingLine
                   size={20}
                   className="size-5 text-muted-foreground/80"
                 />
                 Upgrade
-              </DropdownMenuItem>
+              </DropdownMenuItem> */}
               <DropdownMenuItem className="gap-3 focus:bg-sidebar-accent">
                 <RiLogoutCircleLine
                   size={20}

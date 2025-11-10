@@ -173,6 +173,7 @@ export function EventCalendar({
     setSelectedEvent(newEvent);
     setIsEventDialogOpen(true);
   };
+
   function generateRecurringEvents(
     baseEvent: CalendarEvent,
     recurrenceData: {
@@ -224,10 +225,6 @@ export function EventCalendar({
     if (event.id) {
       // Update existing event
       onEventUpdate?.(event);
-      toast(`Event "${event.title}" updated`, {
-        description: format(new Date(event.start), "MMM d, yyyy"),
-        position: "bottom-left",
-      });
     } else {
       if (recurrenceData?.isRecurring) {
         // Generate multiple events for each occurrence
@@ -238,19 +235,11 @@ export function EventCalendar({
             id: Math.random().toString(36).substring(2, 11),
           });
         });
-        toast(`${events.length} recurring events created`, {
-          description: `${format(new Date(event.start), "MMM d, yyyy")} - ${format(recurrenceData.recurrenceEndDate, "MMM d, yyyy")}`,
-          position: "bottom-left",
-        });
       } else {
         // Single event
         onEventAdd?.({
           ...event,
           id: Math.random().toString(36).substring(2, 11),
-        });
-        toast(`Event "${event.title}" added`, {
-          description: format(new Date(event.start), "MMM d, yyyy"),
-          position: "bottom-left",
         });
       }
     }
@@ -259,18 +248,9 @@ export function EventCalendar({
   };
 
   const handleEventDelete = (eventId: string) => {
-    const deletedEvent = events.find((e) => e.id === eventId);
     onEventDelete?.(eventId);
     setIsEventDialogOpen(false);
     setSelectedEvent(null);
-
-    // Show toast notification when an event is deleted
-    if (deletedEvent) {
-      toast(`Event "${deletedEvent.title}" deleted`, {
-        description: format(new Date(deletedEvent.start), "MMM d, yyyy"),
-        position: "bottom-left",
-      });
-    }
   };
 
   const handleEventUpdate = (updatedEvent: CalendarEvent) => {
@@ -352,7 +332,7 @@ export function EventCalendar({
                 {viewTitle}
               </h2>
             </div>
-            <Participants />
+            {/* <Participants /> */}
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center justify-between gap-2">

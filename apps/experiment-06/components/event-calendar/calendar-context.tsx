@@ -1,28 +1,38 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
-import { etiquettes } from "@/components/big-calendar";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import type { Subject } from "@/components/event-calendar/types";
 
 interface CalendarContextType {
   // Date management
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
 
-  // Etiquette visibility management
+  // Subject visibility management
   visibleColors: string[];
   toggleColorVisibility: (color: string) => void;
   isColorVisible: (color: string | undefined) => boolean;
+
+  // Subject management
+  subjects: Subject[];
+  setSubjects: (subjects: Subject[]) => void;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(
-  undefined,
+  undefined
 );
 
 export function useCalendarContext() {
   const context = useContext(CalendarContext);
   if (context === undefined) {
     throw new Error(
-      "useCalendarContext must be used within a CalendarProvider",
+      "useCalendarContext must be used within a CalendarProvider"
     );
   }
   return context;
@@ -34,14 +44,19 @@ interface CalendarProviderProps {
 
 export function CalendarProvider({ children }: CalendarProviderProps) {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [subjects, setSubjects] = useState<Subject[]>([]);
 
-  // Initialize visibleColors based on the isActive property in etiquettes
-  const [visibleColors, setVisibleColors] = useState<string[]>(() => {
-    // Filter etiquettes to get only those that are active
-    return etiquettes
-      .filter((etiquette) => etiquette.isActive)
-      .map((etiquette) => etiquette.color);
-  });
+  // Initialize visibleColors based on active subjects
+  const [visibleColors, setVisibleColors] = useState<string[]>([]);
+
+  // Update visible colors when subjects change
+  useEffect(() => {
+    setVisibleColors(
+      subjects
+        .filter((subject) => subject.isActive)
+        .map((subject) => subject.color)
+    );
+  }, [subjects]);
 
   // Toggle visibility of a color
   const toggleColorVisibility = (color: string) => {
@@ -56,7 +71,7 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
 
   // Check if a color is visible
   const isColorVisible = (color: string | undefined) => {
-    if (!color) return true; // Events without a color are always visible
+    if (!color) return true;
     return visibleColors.includes(color);
   };
 
@@ -66,6 +81,8 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     visibleColors,
     toggleColorVisibility,
     isColorVisible,
+    subjects,
+    setSubjects,
   };
 
   return (

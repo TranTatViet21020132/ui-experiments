@@ -25,8 +25,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 const data = {
   user: {
-    name: "Sofia Safier",
-    email: "sofia@safier.com",
+    name: "Zanchan",
+    email: "vhg@example.com",
     avatar:
       "https://res.cloudinary.com/dlzlfasou/image/upload/v1743935337/user-01_l4if9t.png",
   },

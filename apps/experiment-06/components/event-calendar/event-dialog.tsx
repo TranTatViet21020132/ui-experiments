@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, memo, useMemo } from "react";
 import { RiCalendarLine, RiDeleteBinLine } from "@remixicon/react";
-import { format, isBefore } from "date-fns";
+import { format, isBefore, addDays } from "date-fns";
 
 import type { CalendarEvent, EventColor } from "@/components/event-calendar";
 import { cn } from "@/lib/utils";
@@ -50,18 +50,11 @@ interface EventDialogProps {
   event: CalendarEvent | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (
-    event: CalendarEvent,
-    recurrenceData?: {
-      isRecurring: boolean;
-      selectedDays: number[];
-      recurrenceEndDate: Date;
-    }
-  ) => void;
+  onSave: (event: CalendarEvent | CalendarEvent[]) => void;
   onDelete: (eventId: string) => void;
 }
 
-// Preset colors for quick selection
+// Constants
 const PRESET_COLORS = [
   { value: "#EF4444", label: "Red" },
   { value: "#F97316", label: "Orange" },
@@ -81,10 +74,24 @@ const PRESET_COLORS = [
   { value: "#EC4899", label: "Pink" },
   { value: "#F43F5E", label: "Rose" },
   { value: "#64748B", label: "Slate" },
-];
+] as const;
+
+const DURATION_OPTIONS = [
+  { value: "30", label: "30 minutes" },
+  { value: "45", label: "45 minutes" },
+  { value: "60", label: "1 hour" },
+  { value: "90", label: "1.5 hours" },
+  { value: "120", label: "2 hours" },
+  { value: "150", label: "2.5 hours" },
+  { value: "180", label: "3 hours" },
+] as const;
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+const DEFAULT_COLOR = "#A855F7";
 
 // Generate time options once at module level
-const timeOptions = (() => {
+const generateTimeOptions = () => {
   const options = [];
   for (let hour = StartHour; hour <= EndHour; hour++) {
     for (let minute = 0; minute < 60; minute += 15) {
@@ -97,21 +104,25 @@ const timeOptions = (() => {
     }
   }
   return options;
-})();
+};
 
-const DURATION_OPTIONS = [
-  { value: "30", label: "30 minutes" },
-  { value: "45", label: "45 minutes" },
-  { value: "60", label: "1 hour" },
-  { value: "90", label: "1.5 hours" },
-  { value: "120", label: "2 hours" },
-  { value: "150", label: "2.5 hours" },
-  { value: "180", label: "3 hours" },
-];
+const timeOptions = generateTimeOptions();
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Utility functions
+const formatTimeForInput = (date: Date): string => {
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = Math.floor(date.getMinutes() / 15) * 15;
+  return `${hours}:${minutes.toString().padStart(2, "0")}`;
+};
 
-// Memoized TimeSelect component
+const createDateWithTime = (date: Date, time: string): Date => {
+  const [hours = 0, minutes = 0] = time.split(":").map(Number);
+  const result = new Date(date);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+};
+
+// Memoized components
 const TimeSelect = memo(
   ({
     id,
@@ -141,10 +152,8 @@ const TimeSelect = memo(
     </div>
   )
 );
-
 TimeSelect.displayName = "TimeSelect";
 
-// Memoized DatePicker component
 const DatePicker = memo(
   ({
     id,
@@ -203,10 +212,8 @@ const DatePicker = memo(
     </div>
   )
 );
-
 DatePicker.displayName = "DatePicker";
 
-// Memoized DaySelector component
 const DaySelector = memo(
   ({
     selectedDays,
@@ -230,10 +237,8 @@ const DaySelector = memo(
     </div>
   )
 );
-
 DaySelector.displayName = "DaySelector";
 
-// Memoized ColorPicker component
 const ColorPicker = memo(
   ({
     selectedColor,
@@ -248,9 +253,18 @@ const ColorPicker = memo(
       setCustomColor(selectedColor);
     }, [selectedColor]);
 
+    const handleCustomColorChange = useCallback(
+      (value: string) => {
+        setCustomColor(value);
+        if (/^#[0-9A-F]{6}$/i.test(value)) {
+          onColorChange(value);
+        }
+      },
+      [onColorChange]
+    );
+
     return (
       <div className="space-y-3">
-        {/* Preset Colors */}
         <div className="grid grid-cols-9 gap-2">
           {PRESET_COLORS.map((color) => (
             <button
@@ -274,7 +288,6 @@ const ColorPicker = memo(
           ))}
         </div>
 
-        {/* Custom Color Picker */}
         <div className="flex gap-2 items-center pt-2 border-t">
           <Label htmlFor="custom-color" className="text-sm">
             Custom:
@@ -285,21 +298,16 @@ const ColorPicker = memo(
               type="color"
               value={customColor}
               onChange={(e) => {
-                setCustomColor(e.target.value);
-                onColorChange(e.target.value);
+                const value = e.target.value;
+                setCustomColor(value);
+                onColorChange(value);
               }}
               className="w-16 h-9 cursor-pointer"
             />
             <Input
               type="text"
               value={customColor}
-              onChange={(e) => {
-                const value = e.target.value;
-                setCustomColor(value);
-                if (/^#[0-9A-F]{6}$/i.test(value)) {
-                  onColorChange(value);
-                }
-              }}
+              onChange={(e) => handleCustomColorChange(e.target.value)}
               placeholder="#3B82F6"
               className="flex-1 font-mono text-sm"
             />
@@ -309,33 +317,36 @@ const ColorPicker = memo(
     );
   }
 );
-
 ColorPicker.displayName = "ColorPicker";
 
-// Memoized SubjectManager component
 const SubjectManager = memo(
   ({
     subjects,
-    selectedColor,
-    onColorChange,
+    selectedSubjectId,
+    onSubjectChange,
     onDeleteSubject,
   }: {
     subjects: any[];
-    selectedColor: string;
-    onColorChange: (color: string) => void;
+    selectedSubjectId: string | null;
+    onSubjectChange: (subjectId: string, color: string) => void;
     onDeleteSubject: (id: string) => void;
   }) => (
     <RadioGroup
       className="flex flex-wrap gap-3"
-      value={selectedColor}
-      onValueChange={onColorChange}
+      value={selectedSubjectId || ""}
+      onValueChange={(subjectId) => {
+        const subject = subjects.find((s) => s.id === subjectId);
+        if (subject) {
+          onSubjectChange(subjectId, subject.color);
+        }
+      }}
     >
       {subjects.map((subject) => (
         <div key={subject.id} className="relative group">
           <div className="flex flex-col items-center gap-1">
             <RadioGroupItem
-              id={`color-${subject.id}`}
-              value={subject.color}
+              id={`subject-${subject.id}`}
+              value={subject.id}
               aria-label={subject.name}
               className="size-10 shadow-sm border-2 transition-all hover:scale-105"
               style={{
@@ -364,7 +375,6 @@ const SubjectManager = memo(
     </RadioGroup>
   )
 );
-
 SubjectManager.displayName = "SubjectManager";
 
 export function EventDialog({
@@ -383,7 +393,8 @@ export function EventDialog({
   const [endTime, setEndTime] = useState(`${DefaultEndHour}:00`);
   const [allDay, setAllDay] = useState(false);
   const [location, setLocation] = useState("");
-  const [color, setColor] = useState<string>("#A855F7");
+  const [color, setColor] = useState<EventColor>(DEFAULT_COLOR);
+  const [subjectId, setSubjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // UI state
@@ -404,35 +415,50 @@ export function EventDialog({
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectColor, setNewSubjectColor] = useState("#3B82F6");
 
-  // Fetch subjects from database
+  // Hooks
   const { data: subjects = [] } = useSubjects();
   const createSubject = useCreateSubject();
   const deleteSubject = useDeleteSubject();
 
-  const formatTimeForInput = useCallback((date: Date) => {
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = Math.floor(date.getMinutes() / 15) * 15;
-    return `${hours}:${minutes.toString().padStart(2, "0")}`;
-  }, []);
+  // Memoized initial state
+  const initialState = useMemo(
+    () => ({
+      title: "",
+      description: "",
+      startDate: new Date(),
+      endDate: new Date(),
+      startTime: `${DefaultStartHour}:00`,
+      endTime: `${DefaultEndHour}:00`,
+      allDay: false,
+      location: "",
+      color: DEFAULT_COLOR,
+      subjectId: null,
+      duration: "60",
+      isRecurring: false,
+      recurrenceEndDate: undefined,
+      selectedDays: [],
+    }),
+    []
+  );
 
   const resetForm = useCallback(() => {
-    setTitle("");
-    setDescription("");
-    setStartDate(new Date());
-    setEndDate(new Date());
-    setStartTime(`${DefaultStartHour}:00`);
-    setEndTime(`${DefaultEndHour}:00`);
-    setAllDay(false);
-    setLocation("");
-    setColor("#A855F7");
+    setTitle(initialState.title);
+    setDescription(initialState.description);
+    setStartDate(initialState.startDate);
+    setEndDate(initialState.endDate);
+    setStartTime(initialState.startTime);
+    setEndTime(initialState.endTime);
+    setAllDay(initialState.allDay);
+    setLocation(initialState.location);
+    setColor(initialState.color);
+    setSubjectId(initialState.subjectId);
     setError(null);
-    setDuration("60");
-    setIsRecurring(false);
-    setRecurrenceEndDate(undefined);
-    setSelectedDays([]);
-  }, []);
+    setDuration(initialState.duration);
+    setIsRecurring(initialState.isRecurring);
+    setRecurrenceEndDate(initialState.recurrenceEndDate);
+    setSelectedDays(initialState.selectedDays);
+  }, [initialState]);
 
-  // Initialize form when dialog opens
   useEffect(() => {
     if (isOpen) {
       if (event) {
@@ -446,103 +472,184 @@ export function EventDialog({
         setEndTime(formatTimeForInput(end));
         setAllDay(event.allDay || false);
         setLocation(event.location || "");
-        setColor(event.color || "#3B82F6");
+        setColor(event.color || DEFAULT_COLOR);
+        // Set subject ID from the event
+        const eventSubjectId = event.subject || null;
+        setSubjectId(eventSubjectId);
+        // If event has a subject, use that subject's color, otherwise use event color
+        if (eventSubjectId) {
+          const subject = subjects.find((s) => s.id === eventSubjectId);
+          if (subject) {
+            setColor(subject.color);
+          }
+        }
       } else {
         resetForm();
       }
       setError(null);
     }
-  }, [isOpen, event, formatTimeForInput, resetForm]);
+  }, [isOpen, event, resetForm, subjects]);
 
-  const handleSave = async () => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+  // Ensure "Other" subject exists
+  const ensureOtherSubject = useCallback(async () => {
+    const otherSubject = subjects.find((s) => s.name === "Other");
+    if (!otherSubject) {
+      try {
+        const newSubject = await createSubject.mutateAsync({
+          name: "Other",
+          color: DEFAULT_COLOR,
+          isActive: true,
+        });
+        return { id: newSubject.id, color: newSubject.color };
+      } catch (error) {
+        console.error("Failed to create Other subject:", error);
+        return { id: "", color: DEFAULT_COLOR };
+      }
+    }
+    return { id: otherSubject.id, color: otherSubject.color };
+  }, [subjects, createSubject]);
 
-    if (!allDay) {
-      const [startHours = 0, startMinutes = 0] = startTime.split(":").map(Number);
-      const [endHours = 0, endMinutes = 0] = endTime.split(":").map(Number);
+  // Generate recurring events
+  const generateRecurringEvents = useCallback(
+    (
+      start: Date,
+      durationMinutes: number,
+      eventTitle: string,
+      finalColor: string,
+      finalSubjectId: string
+    ): Omit<CalendarEvent, "id">[] => {
+      if (!recurrenceEndDate || selectedDays.length === 0) return [];
 
-      if (
-        startHours < StartHour ||
-        startHours > EndHour ||
-        endHours < StartHour ||
-        endHours > EndHour
-      ) {
-        setError(
-          `Selected time must be between ${StartHour}:00 and ${EndHour}:00`
-        );
+      const events: Omit<CalendarEvent, "id">[] = [];
+      let currentDate = new Date(start);
+
+      while (currentDate <= recurrenceEndDate) {
+        const dayOfWeek = currentDate.getDay();
+
+        if (selectedDays.includes(dayOfWeek)) {
+          const eventStart = new Date(currentDate);
+          eventStart.setHours(start.getHours(), start.getMinutes(), 0, 0);
+
+          const eventEnd = new Date(
+            eventStart.getTime() + durationMinutes * 60000
+          );
+
+          events.push({
+            title: eventTitle,
+            description,
+            start: eventStart,
+            end: eventEnd,
+            allDay: false,
+            location,
+            color: finalColor,
+            subject: finalSubjectId,
+          });
+        }
+
+        currentDate = addDays(currentDate, 1);
+      }
+
+      return events;
+    },
+    [recurrenceEndDate, selectedDays, description, location]
+  );
+
+  const handleSave = useCallback(async () => {
+    try {
+      const start = createDateWithTime(startDate, startTime);
+      let end: Date;
+
+      if (allDay) {
+        start.setHours(0, 0, 0, 0);
+        end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+      } else if (isRecurring) {
+        const durationMinutes = parseInt(duration);
+        end = new Date(start.getTime() + durationMinutes * 60000);
+      } else {
+        end = createDateWithTime(endDate, endTime);
+      }
+
+      // Validate dates
+      if (isBefore(end, start)) {
+        setError("End date cannot be before start date");
         return;
       }
 
-      start.setHours(startHours, startMinutes, 0);
-      end.setHours(endHours, endMinutes, 0);
-    } else {
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-    }
+      // Determine subject and color
+      let finalSubjectId = subjectId;
+      let finalColor = color;
 
-    // Validate that end date is not before start date
-    if (isBefore(end, start)) {
-      setError("End date cannot be before start date");
-      return;
-    }
-
-    // Use generic title if empty
-    const eventTitle = title.trim() ? title : "(no title)";
-
-    // Auto-create "Other" subject if it doesn't exist and user hasn't selected a color
-    let finalColor = color;
-    if (!color || color === "#A855F7") {
-      try {
-        // Check if "Other" subject exists
-        const response = await fetch("/api/subjects");
-        const subjects = await response.json();
-
-        const otherSubject = subjects.find((s: any) => s.name === "Other");
-
-        if (!otherSubject) {
-          // Create the "Other" subject
-          const createResponse = await fetch("/api/subjects", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: "Other",
-              color: "#A855F7",
-              isActive: true,
-            }),
-          });
-
-          if (createResponse.ok) {
-            const newSubject = await createResponse.json();
-            finalColor = newSubject.color;
-          }
-        } else {
-          finalColor = otherSubject.color;
-        }
-      } catch (error) {
-        console.error("Error creating default subject:", error);
-        // Use default color if creation fails
-        finalColor = "#A855F7";
+      if (!subjectId) {
+        const otherSubject = await ensureOtherSubject();
+        finalSubjectId = otherSubject.id;
+        finalColor = otherSubject.color;
       }
-    }
 
-    onSave({
-      id: event?.id || "",
-      title: eventTitle,
-      description,
-      start,
-      end,
-      allDay,
-      location,
-      color: finalColor,
-    });
-  };
+      // Get subject name for title if needed
+      const selectedSubject = subjects.find((s) => s.id === finalSubjectId);
+      const eventTitle =
+        title.trim() || selectedSubject?.name || "Untitled Event";
+
+      // Handle recurring events
+      if (isRecurring && selectedDays.length > 0 && recurrenceEndDate) {
+        const events = generateRecurringEvents(
+          start,
+          parseInt(duration),
+          eventTitle,
+          finalColor,
+          finalSubjectId!
+        );
+        onSave(events as CalendarEvent[]);
+      } else {
+        // Single event
+        onSave({
+          id: event?.id || "",
+          title: eventTitle,
+          description,
+          start,
+          end,
+          allDay,
+          location,
+          color: finalColor,
+          subject: finalSubjectId || undefined,
+        });
+      }
+
+      onClose();
+    } catch (err) {
+      console.error("Error saving event:", err);
+      setError("Failed to save event. Please try again.");
+    }
+  }, [
+    startDate,
+    startTime,
+    endDate,
+    endTime,
+    allDay,
+    isRecurring,
+    duration,
+    title,
+    description,
+    location,
+    color,
+    subjectId,
+    event?.id,
+    selectedDays,
+    recurrenceEndDate,
+    subjects,
+    ensureOtherSubject,
+    generateRecurringEvents,
+    onSave,
+    onClose,
+  ]);
 
   const handleDelete = useCallback(() => {
     if (event?.id) {
       onDelete(event.id);
+      onClose();
     }
-  }, [event?.id, onDelete]);
+  }, [event?.id, onDelete, onClose]);
 
   const handleStartDateChange = useCallback(
     (date: Date) => {
@@ -568,10 +675,18 @@ export function EventDialog({
     );
   }, []);
 
+  const handleSubjectChange = useCallback(
+    (subjectId: string, color: string) => {
+      setSubjectId(subjectId);
+      setColor(color);
+    },
+    []
+  );
+
   const handleAddSubject = useCallback(async () => {
     if (newSubjectName.trim()) {
       try {
-        await createSubject.mutateAsync({
+        const newSubject = await createSubject.mutateAsync({
           name: newSubjectName.trim(),
           color: newSubjectColor,
           isActive: true,
@@ -579,6 +694,9 @@ export function EventDialog({
         setNewSubjectName("");
         setNewSubjectColor("#3B82F6");
         setIsAddingSubject(false);
+        // Auto-select the newly created subject
+        setSubjectId(newSubject.id);
+        setColor(newSubject.color);
       } catch (error) {
         console.error("Failed to create subject:", error);
       }
@@ -589,6 +707,11 @@ export function EventDialog({
     async (subjectId: string) => {
       try {
         await deleteSubject.mutateAsync(subjectId);
+        // Clear selection if deleted subject was selected
+        if (subjectId === subjectId) {
+          setSubjectId(null);
+          setColor(DEFAULT_COLOR);
+        }
       } catch (error) {
         console.error("Failed to delete subject:", error);
       }
@@ -621,7 +744,7 @@ export function EventDialog({
         )}
 
         <div className="grid gap-4 py-4">
-          {/* Subject Management - Moved to top */}
+          {/* Subject Management */}
           <fieldset className="space-y-3">
             <div className="flex items-center justify-between">
               <legend className="text-foreground text-sm leading-none font-medium">
@@ -670,13 +793,13 @@ export function EventDialog({
 
             <SubjectManager
               subjects={subjects}
-              selectedColor={color}
-              onColorChange={setColor}
+              selectedSubjectId={subjectId}
+              onSubjectChange={handleSubjectChange}
               onDeleteSubject={handleDeleteSubject}
             />
           </fieldset>
 
-          {/* Title - Now optional */}
+          {/* Title */}
           <div className="*:not-first:mt-1.5">
             <Label htmlFor="title" className="flex items-center gap-2">
               Title

@@ -46,7 +46,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import ThemeToggle from "@/components/theme-toggle";
-import Participants from "@/components/participants";
 
 export interface EventCalendarProps {
   events?: CalendarEvent[];
@@ -174,74 +173,24 @@ export function EventCalendar({
     setIsEventDialogOpen(true);
   };
 
-  function generateRecurringEvents(
-    baseEvent: CalendarEvent,
-    recurrenceData: {
-      selectedDays: number[];
-      recurrenceEndDate: Date;
-    }
-  ): CalendarEvent[] {
-    const events: CalendarEvent[] = [];
-    const startDate = new Date(baseEvent.start);
-    const endDate = new Date(baseEvent.end);
-    const duration = endDate.getTime() - startDate.getTime();
-
-    const currentDate = new Date(startDate);
-
-    while (currentDate <= recurrenceData.recurrenceEndDate) {
-      const dayOfWeek = currentDate.getDay();
-
-      if (recurrenceData.selectedDays.includes(dayOfWeek)) {
-        const eventStart = new Date(currentDate);
-        eventStart.setHours(startDate.getHours());
-        eventStart.setMinutes(startDate.getMinutes());
-        eventStart.setSeconds(0);
-        eventStart.setMilliseconds(0);
-
-        const eventEnd = new Date(eventStart.getTime() + duration);
-
-        events.push({
-          ...baseEvent,
-          start: eventStart,
-          end: eventEnd,
+  const handleEventSave = (event: CalendarEvent | CalendarEvent[]) => {
+    if (Array.isArray(event)) {
+      // Handle recurring events (array of events)
+      event.forEach((evt) => {
+        onEventAdd?.({
+          ...evt,
+          id: Math.random().toString(36).substring(2, 11),
         });
-      }
-
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return events;
-  }
-
-  const handleEventSave = (
-    event: CalendarEvent,
-    recurrenceData?: {
-      isRecurring: boolean;
-      selectedDays: number[];
-      recurrenceEndDate: Date;
-    }
-  ) => {
-    if (event.id) {
+      });
+    } else if (event.id) {
       // Update existing event
       onEventUpdate?.(event);
     } else {
-      if (recurrenceData?.isRecurring) {
-        // Generate multiple events for each occurrence
-        const events = generateRecurringEvents(event, recurrenceData);
-        events.forEach((evt) => {
-          onEventAdd?.({
-            ...evt,
-            id: Math.random().toString(36).substring(2, 11),
-          });
-        });
-      } else {
-        // Single event
-        onEventAdd?.({
-          ...event,
-          id: Math.random().toString(36).substring(2, 11),
-        });
-      }
+      // Single new event
+      onEventAdd?.({
+        ...event,
+        id: Math.random().toString(36).substring(2, 11),
+      });
     }
     setIsEventDialogOpen(false);
     setSelectedEvent(null);

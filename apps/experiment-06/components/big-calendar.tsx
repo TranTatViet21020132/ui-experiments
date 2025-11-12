@@ -9,13 +9,11 @@ import {
   useUpdateEvent,
   useDeleteEvent,
 } from "@/hooks/use-events";
-import { useQueryClient } from "@tanstack/react-query";
 import { useSubjects } from "@/hooks/use-subjects";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 export default function BigCalendar() {
-  const queryClient = useQueryClient();  
   const { isColorVisible, setSubjects } = useCalendarContext();
 
   // Fetch events and subjects from database
@@ -49,33 +47,27 @@ export default function BigCalendar() {
     try {
       if (Array.isArray(event)) {
         // Bulk create for recurring events
+        // All events in the array should already have the correct color from handleSave
         const results = await Promise.all(
           event.map((evt) => createEvent.mutateAsync(evt))
         );
-
-        // Invalidate subjects cache in case "Other" was auto-created
-        queryClient.invalidateQueries({ queryKey: ["subjects"] });
-
-        toast(`${results.length} events created`, {
+        toast(`${results.length} recurring events created`, {
           position: "bottom-left",
         });
       } else {
-        // Single event
+        // Single event - color should already be set from handleSave
         await createEvent.mutateAsync(event);
-
-        // Invalidate subjects cache in case "Other" was auto-created
-        queryClient.invalidateQueries({ queryKey: ["subjects"] });
-
         toast(`Event "${event.title}" added`, {
           description: format(new Date(event.start), "MMM d, yyyy"),
           position: "bottom-left",
         });
       }
     } catch (error) {
+      console.error("Failed to create event:", error);
       toast.error("Failed to create event");
     }
   };
-
+  
   const handleEventUpdate = async (updatedEvent: CalendarEvent) => {
     try {
       await updateEvent.mutateAsync(updatedEvent);

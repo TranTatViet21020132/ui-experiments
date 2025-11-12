@@ -20,6 +20,7 @@ export async function getAllEvents(): Promise<CalendarEvent[]> {
     color: event.color,
     label: event.label,
     location: event.location,
+    subject: event.subject
   }));
 }
 
@@ -40,6 +41,7 @@ export async function createEvent(
     label: event.label,
     location: event.location,
     createdAt: new Date(),
+    subject: event.subject
   });
 
   return {

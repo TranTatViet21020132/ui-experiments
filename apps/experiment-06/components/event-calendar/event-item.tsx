@@ -150,6 +150,7 @@ export function EventItem({
   onTouchStart,
 }: EventItemProps) {
   const eventColor = event.color;
+  console.log(event);
 
   // Use the provided currentTime (for dragging) or the event's actual time
   const displayStart = useMemo(() => {

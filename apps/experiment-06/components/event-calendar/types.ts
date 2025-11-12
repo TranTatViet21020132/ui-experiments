@@ -10,6 +10,7 @@ export interface CalendarEvent {
   color?: string; // Changed from EventColor to string for hex colors
   label?: string;
   location?: string;
+  subject?: string;
 }
 
 // New Subject interface

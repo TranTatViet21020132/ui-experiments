@@ -3,9 +3,10 @@ import { updateEvent, deleteEvent } from "@/lib/db";
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     const body = await request.json();
 
     // Validate required fields
@@ -26,7 +27,7 @@ export async function PUT(
       allDay: body.allDay || false,
       location: body.location || "",
       color: body.color || "#A855F7",
-      subject: body.subject || null, // Add subject field
+      subject: body.subject || null,
     };
 
     const event = await updateEvent(eventData);
@@ -42,9 +43,10 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     console.log("Attempting to delete event with id:", params.id);
     await deleteEvent(params.id);
     return NextResponse.json({ success: true }, { status: 200 });

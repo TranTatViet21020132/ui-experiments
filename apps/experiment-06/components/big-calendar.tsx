@@ -75,7 +75,7 @@ export default function BigCalendar() {
         description: format(new Date(updatedEvent.start), "MMM d, yyyy"),
         position: "bottom-left",
       });
-    } catch (error) {
+    } catch {
       toast.error("Failed to update event");
     }
   };
@@ -90,7 +90,7 @@ export default function BigCalendar() {
           position: "bottom-left",
         });
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete event");
     }
   };

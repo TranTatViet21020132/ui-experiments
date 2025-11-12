@@ -3,9 +3,10 @@ import { updateSubject, deleteSubject } from "@/lib/subjects-db";
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     const body = await request.json();
     const subject = await updateSubject({ ...body, id: params.id });
     return NextResponse.json(subject);
@@ -20,9 +21,10 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params;
     await deleteSubject(params.id);
     return NextResponse.json({ success: true });
   } catch (error) {

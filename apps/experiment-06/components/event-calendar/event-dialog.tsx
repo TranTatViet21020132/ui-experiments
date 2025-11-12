@@ -326,6 +326,7 @@ const SubjectManager = memo(
     onSubjectChange,
     onDeleteSubject,
   }: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     subjects: any[];
     selectedSubjectId: string | null;
     onSubjectChange: (subjectId: string, color: string) => void;

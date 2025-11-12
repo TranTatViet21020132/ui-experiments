@@ -1,3 +1,4 @@
+/* eslint-disable turbo/no-undeclared-env-vars */
 import { MongoClient } from "mongodb";
 
 if (!process.env.MONGODB_URI) {
@@ -11,7 +12,7 @@ let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
 
 if (process.env.NODE_ENV === "development") {
-  let globalWithMongo = global as typeof globalThis & {
+  const globalWithMongo = global as typeof globalThis & {
     _mongoClientPromise?: Promise<MongoClient>;
   };
 

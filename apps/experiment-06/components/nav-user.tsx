@@ -1,8 +1,6 @@
 import {
   RiExpandUpDownLine,
   RiUserLine,
-  RiGroupLine,
-  RiSparklingLine,
   RiLogoutCircleLine,
 } from "@remixicon/react";
 

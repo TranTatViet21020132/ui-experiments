@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const events = await getAllEvents();
     return NextResponse.json(events);
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch events" },
       { status: 500 }

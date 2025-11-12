@@ -1,5 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [  
+    "MONGODB_URI"  
+  ],
   "ui": "tui",
   "tasks": {
     "build": {

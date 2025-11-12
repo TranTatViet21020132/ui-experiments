@@ -10,16 +10,11 @@ import React, {
 import type { Subject } from "@/components/event-calendar/types";
 
 interface CalendarContextType {
-  // Date management
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
-
-  // Subject visibility management
   visibleColors: string[];
   toggleColorVisibility: (color: string) => void;
   isColorVisible: (color: string | undefined) => boolean;
-
-  // Subject management
   subjects: Subject[];
   setSubjects: (subjects: Subject[]) => void;
 }
@@ -69,9 +64,9 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     });
   };
 
-  // Check if a color is visible
+  // Check if a color is visible - FIXED to handle undefined colors properly
   const isColorVisible = (color: string | undefined) => {
-    if (!color) return true;
+    if (!color) return true; // Events without a color are always visible
     return visibleColors.includes(color);
   };
 

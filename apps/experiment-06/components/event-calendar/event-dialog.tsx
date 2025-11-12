@@ -383,7 +383,7 @@ export function EventDialog({
   const [endTime, setEndTime] = useState(`${DefaultEndHour}:00`);
   const [allDay, setAllDay] = useState(false);
   const [location, setLocation] = useState("");
-  const [color, setColor] = useState<EventColor>("#3B82F6");
+  const [color, setColor] = useState<string>("#A855F7");
   const [error, setError] = useState<string | null>(null);
 
   // UI state
@@ -424,7 +424,7 @@ export function EventDialog({
     setEndTime(`${DefaultEndHour}:00`);
     setAllDay(false);
     setLocation("");
-    setColor("#3B82F6");
+    setColor("#A855F7");
     setError(null);
     setDuration("60");
     setIsRecurring(false);
@@ -454,16 +454,20 @@ export function EventDialog({
     }
   }, [isOpen, event, formatTimeForInput, resetForm]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = async () => {
     const start = new Date(startDate);
-    let end = new Date(endDate);
+    const end = new Date(endDate);
 
     if (!allDay) {
-      const [startHours = 0, startMinutes = 0] = startTime
-        .split(":")
-        .map(Number);
+      const [startHours = 0, startMinutes = 0] = startTime.split(":").map(Number);
+      const [endHours = 0, endMinutes = 0] = endTime.split(":").map(Number);
 
-      if (startHours < StartHour || startHours > EndHour) {
+      if (
+        startHours < StartHour ||
+        startHours > EndHour ||
+        endHours < StartHour ||
+        endHours > EndHour
+      ) {
         setError(
           `Selected time must be between ${StartHour}:00 and ${EndHour}:00`
         );
@@ -471,56 +475,58 @@ export function EventDialog({
       }
 
       start.setHours(startHours, startMinutes, 0);
-
-      if (isRecurring) {
-        end = new Date(start);
-        end.setMinutes(end.getMinutes() + parseInt(duration));
-      } else {
-        const [endHours = 0, endMinutes = 0] = endTime.split(":").map(Number);
-
-        if (endHours < StartHour || endHours > EndHour) {
-          setError(
-            `Selected time must be between ${StartHour}:00 and ${EndHour}:00`
-          );
-          return;
-        }
-
-        end.setHours(endHours, endMinutes, 0);
-      }
+      end.setHours(endHours, endMinutes, 0);
     } else {
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
     }
 
+    // Validate that end date is not before start date
     if (isBefore(end, start)) {
       setError("End date cannot be before start date");
       return;
     }
 
-    if (isRecurring) {
-      if (selectedDays.length === 0) {
-        setError("Please select at least one day for recurring events");
-        return;
-      }
-      if (!recurrenceEndDate) {
-        setError("Please select an end date for recurring events");
-        return;
-      }
-      if (isBefore(recurrenceEndDate, startDate)) {
-        setError("Recurrence end date must be after start date");
-        return;
+    // Use generic title if empty
+    const eventTitle = title.trim() ? title : "(no title)";
+
+    // Auto-create "Other" subject if it doesn't exist and user hasn't selected a color
+    let finalColor = color;
+    if (!color || color === "#A855F7") {
+      try {
+        // Check if "Other" subject exists
+        const response = await fetch("/api/subjects");
+        const subjects = await response.json();
+
+        const otherSubject = subjects.find((s: any) => s.name === "Other");
+
+        if (!otherSubject) {
+          // Create the "Other" subject
+          const createResponse = await fetch("/api/subjects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Other",
+              color: "#A855F7",
+              isActive: true,
+            }),
+          });
+
+          if (createResponse.ok) {
+            const newSubject = await createResponse.json();
+            finalColor = newSubject.color;
+          }
+        } else {
+          finalColor = otherSubject.color;
+        }
+      } catch (error) {
+        console.error("Error creating default subject:", error);
+        // Use default color if creation fails
+        finalColor = "#A855F7";
       }
     }
 
-    // Determine the title to use
-    let eventTitle = title.trim();
-    if (!eventTitle) {
-      // Find the subject with matching color
-      const matchingSubject = subjects.find((s) => s.color === color);
-      eventTitle = matchingSubject ? matchingSubject.name : "(no title)";
-    }
-
-    const eventData = {
+    onSave({
       id: event?.id || "",
       title: eventTitle,
       description,
@@ -528,36 +534,9 @@ export function EventDialog({
       end,
       allDay,
       location,
-      color,
-    };
-
-    if (isRecurring && recurrenceEndDate) {
-      onSave(eventData, {
-        isRecurring: true,
-        selectedDays,
-        recurrenceEndDate,
-      });
-    } else {
-      onSave(eventData);
-    }
-  }, [
-    startDate,
-    endDate,
-    allDay,
-    startTime,
-    endTime,
-    title,
-    description,
-    location,
-    color,
-    event?.id,
-    isRecurring,
-    selectedDays,
-    recurrenceEndDate,
-    duration,
-    subjects,
-    onSave,
-  ]);
+      color: finalColor,
+    });
+  };
 
   const handleDelete = useCallback(() => {
     if (event?.id) {

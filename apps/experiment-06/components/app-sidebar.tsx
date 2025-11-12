@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { RiCheckLine } from "@remixicon/react";
 import { useCalendarContext } from "@/components/event-calendar/calendar-context";
+import { useSubjects } from "@/hooks/use-subjects";
+
 import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
@@ -20,14 +22,13 @@ import {
 } from "@/components/ui/sidebar";
 import SidebarCalendar from "@/components/sidebar-calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useSubjects } from "@/hooks/use-subjects";
 
 const data = {
   user: {
-    name: "Giang thúi",
-    email: "giang@thui.com",
+    name: "Sofia Safier",
+    email: "sofia@safier.com",
     avatar:
-      "",
+      "https://res.cloudinary.com/dlzlfasou/image/upload/v1743935337/user-01_l4if9t.png",
   },
 };
 
@@ -64,14 +65,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarTrigger className="text-muted-foreground/80 hover:text-foreground/80 hover:bg-transparent!" />
         </div>
       </SidebarHeader>
-
       <SidebarContent className="gap-0 mt-3 pt-3 border-t">
-        {/* Mini Calendar */}
         <SidebarGroup className="px-1">
           <SidebarCalendar />
         </SidebarGroup>
-
-        {/* Dynamic Subjects List */}
         <SidebarGroup className="px-1 mt-3 pt-4 border-t">
           <SidebarGroupLabel className="uppercase text-muted-foreground/65">
             Calendars
@@ -80,17 +77,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               {isLoading ? (
                 <div className="text-muted-foreground text-sm px-2">
-                  Loading...
+                  Loading subjects...
                 </div>
               ) : (
-                subjects.map((subject: any) => (
+                subjects.map((subject) => (
                   <SidebarMenuItem key={subject.id}>
                     <SidebarMenuButton
                       asChild
-                      className="relative rounded-md justify-between"
+                      className="relative rounded-md [&>svg]:size-auto justify-between has-focus-visible:border-ring has-focus-visible:ring-ring/50 has-focus-visible:ring-[3px]"
                     >
                       <span>
-                        <span className="font-medium flex items-center gap-3">
+                        <span className="font-medium flex items-center justify-between gap-3">
                           <Checkbox
                             id={subject.id}
                             className="sr-only peer"
@@ -102,10 +99,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           <RiCheckLine
                             className="peer-not-data-[state=checked]:invisible"
                             size={16}
+                            aria-hidden="true"
                           />
                           <label
                             htmlFor={subject.id}
-                            className="peer-not-data-[state=checked]:line-through peer-not-data-[state=checked]:text-muted-foreground/65"
+                            className="peer-not-data-[state=checked]:line-through peer-not-data-[state=checked]:text-muted-foreground/65 after:absolute after:inset-0"
                           >
                             {subject.name}
                           </label>
@@ -123,7 +121,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>

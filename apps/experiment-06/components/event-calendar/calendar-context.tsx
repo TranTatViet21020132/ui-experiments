@@ -38,21 +38,27 @@ interface CalendarProviderProps {
   children: ReactNode;
 }
 
+// Helper function to normalize date to local midnight
+function getLocalMidnight(date: Date = new Date()): Date {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
 export function CalendarProvider({ children }: CalendarProviderProps) {
   const [mounted, setMounted] = useState(false);
-  const [currentDate, setCurrentDate] = useState<Date>(() => {
-    const now = new Date();
-    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  });
 
+  // Initialize with null to avoid hydration mismatch
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [visibleColors, setVisibleColors] = useState<string[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
 
   useEffect(() => {
+    // Set the actual current date only on client side
+    setCurrentDate(getLocalMidnight());
     setMounted(true);
   }, []);
 
-  // Add this function that was missing
   const toggleColorVisibility = (color: string) => {
     setVisibleColors((prev) => {
       if (prev.includes(color)) {
@@ -69,13 +75,6 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
   };
 
   const isSameDay = (date1: Date, date2: Date) => {
-    if (!mounted) {
-      return (
-        date1.getUTCFullYear() === date2.getUTCFullYear() &&
-        date1.getUTCMonth() === date2.getUTCMonth() &&
-        date1.getUTCDate() === date2.getUTCDate()
-      );
-    }
     return (
       date1.getFullYear() === date2.getFullYear() &&
       date1.getMonth() === date2.getMonth() &&
@@ -83,11 +82,16 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     );
   };
 
+  // Don't render until mounted and currentDate is set
+  if (!mounted || !currentDate) {
+    return null; // Or a loading skeleton
+  }
+
   const value = {
     currentDate,
     setCurrentDate,
     visibleColors,
-    toggleColorVisibility, // ✅ Now this function exists
+    toggleColorVisibility,
     isColorVisible,
     subjects,
     setSubjects,

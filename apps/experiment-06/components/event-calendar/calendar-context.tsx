@@ -6,8 +6,12 @@ import React, {
   useState,
   useEffect,
   ReactNode,
+  useRef,
+  DependencyList,
+  EffectCallback,
 } from "react";
 import type { Subject } from "@/components/event-calendar/types";
+import { isEqual } from "lodash"; 
 
 interface CalendarContextType {
   currentDate: Date;
@@ -18,6 +22,31 @@ interface CalendarContextType {
   subjects: Subject[];
   setSubjects: (subjects: Subject[]) => void;
   isSameDay: (date1: Date, date2: Date) => boolean;
+}
+
+export function useDeepEffect(
+  effect: EffectCallback,
+  deps: DependencyList
+): void {
+  const isFirstRender = useRef(true);
+  const prevDeps = useRef<DependencyList>(deps);
+
+  useEffect(() => {
+    // Always run on first render
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return effect();
+    }
+
+    // Check if dependencies have deeply changed using lodash
+    const hasChanged = !isEqual(prevDeps.current, deps);
+
+    if (hasChanged) {
+      prevDeps.current = deps;
+      return effect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(
@@ -44,7 +73,7 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
   const [subjects, setSubjects] = useState<Subject[]>([]);
 
   // Initialize date only on client side
-  useEffect(() => {
+  useDeepEffect(() => {
     setCurrentDate(new Date());
   }, []);
 
@@ -88,7 +117,7 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
 
   const value = {
     currentDate: currentDate || new Date(), // Fallback for SSR
-    setCurrentDate: (date: Date) => setCurrentDate(date),
+    setCurrentDate,
     visibleColors,
     toggleColorVisibility,
     isColorVisible,

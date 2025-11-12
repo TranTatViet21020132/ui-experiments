@@ -17,6 +17,7 @@ interface CalendarContextType {
   isColorVisible: (color: string | undefined) => boolean;
   subjects: Subject[];
   setSubjects: (subjects: Subject[]) => void;
+  isSameDay: (date1: Date, date2: Date) => boolean;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(
@@ -38,8 +39,14 @@ interface CalendarProviderProps {
 }
 
 export function CalendarProvider({ children }: CalendarProviderProps) {
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  // Initialize as null to avoid hydration mismatch
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+
+  // Initialize date only on client side
+  useEffect(() => {
+    setCurrentDate(new Date());
+  }, []);
 
   // Initialize visibleColors based on active subjects
   const [visibleColors, setVisibleColors] = useState<string[]>([]);
@@ -64,20 +71,30 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     });
   };
 
-  // Check if a color is visible - FIXED to handle undefined colors properly
+  // Check if a color is visible - handles undefined colors properly
   const isColorVisible = (color: string | undefined) => {
     if (!color) return true; // Events without a color are always visible
     return visibleColors.includes(color);
   };
 
+  // Helper function to compare dates by day/month/year only
+  const isSameDay = (date1: Date, date2: Date) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+
   const value = {
-    currentDate,
-    setCurrentDate,
+    currentDate: currentDate || new Date(), // Fallback for SSR
+    setCurrentDate: (date: Date) => setCurrentDate(date),
     visibleColors,
     toggleColorVisibility,
     isColorVisible,
     subjects,
     setSubjects,
+    isSameDay,
   };
 
   return (

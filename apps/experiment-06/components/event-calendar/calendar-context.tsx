@@ -6,12 +6,8 @@ import React, {
   useState,
   useEffect,
   ReactNode,
-  useRef,
-  DependencyList,
-  EffectCallback,
 } from "react";
 import type { Subject } from "@/components/event-calendar/types";
-import { isEqual } from "lodash"; 
 
 interface CalendarContextType {
   currentDate: Date;
@@ -22,31 +18,6 @@ interface CalendarContextType {
   subjects: Subject[];
   setSubjects: (subjects: Subject[]) => void;
   isSameDay: (date1: Date, date2: Date) => boolean;
-}
-
-export function useDeepEffect(
-  effect: EffectCallback,
-  deps: DependencyList
-): void {
-  const isFirstRender = useRef(true);
-  const prevDeps = useRef<DependencyList>(deps);
-
-  useEffect(() => {
-    // Always run on first render
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return effect();
-    }
-
-    // Check if dependencies have deeply changed using lodash
-    const hasChanged = !isEqual(prevDeps.current, deps);
-
-    if (hasChanged) {
-      prevDeps.current = deps;
-      return effect();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(
@@ -68,17 +39,24 @@ interface CalendarProviderProps {
 }
 
 export function CalendarProvider({ children }: CalendarProviderProps) {
-  // Initialize as null to avoid hydration mismatch
-  const [currentDate, setCurrentDate] = useState<Date | null>(null);
+  // Initialize with a stable date to avoid hydration mismatch
+  const [currentDate, setCurrentDate] = useState<Date>(() => {
+    // This will be the same on server and initial client render
+    const now = new Date();
+    // Normalize to start of day in UTC to avoid timezone issues
+    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  });
+
   const [subjects, setSubjects] = useState<Subject[]>([]);
-
-  // Initialize date only on client side
-  useDeepEffect(() => {
-    setCurrentDate(new Date());
-  }, []);
-
-  // Initialize visibleColors based on active subjects
   const [visibleColors, setVisibleColors] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Update to actual current date once on client
+    const now = new Date();
+    setCurrentDate(
+      new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    );
+  }, []);
 
   // Update visible colors when subjects change
   useEffect(() => {
@@ -102,21 +80,21 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
 
   // Check if a color is visible - handles undefined colors properly
   const isColorVisible = (color: string | undefined) => {
-    if (!color) return true; // Events without a color are always visible
+    if (!color) return true;
     return visibleColors.includes(color);
   };
 
   // Helper function to compare dates by day/month/year only
   const isSameDay = (date1: Date, date2: Date) => {
     return (
-      date1.getFullYear() === date2.getFullYear() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getDate() === date2.getDate()
+      date1.getUTCFullYear() === date2.getUTCFullYear() &&
+      date1.getUTCMonth() === date2.getUTCMonth() &&
+      date1.getUTCDate() === date2.getUTCDate()
     );
   };
 
   const value = {
-    currentDate: currentDate || new Date(), // Fallback for SSR
+    currentDate,
     setCurrentDate,
     visibleColors,
     toggleColorVisibility,

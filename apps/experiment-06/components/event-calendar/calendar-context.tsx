@@ -39,35 +39,20 @@ interface CalendarProviderProps {
 }
 
 export function CalendarProvider({ children }: CalendarProviderProps) {
-  // Initialize with a stable date to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false);
   const [currentDate, setCurrentDate] = useState<Date>(() => {
-    // This will be the same on server and initial client render
     const now = new Date();
-    // Normalize to start of day in UTC to avoid timezone issues
     return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   });
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [visibleColors, setVisibleColors] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
 
   useEffect(() => {
-    // Update to actual current date once on client
-    const now = new Date();
-    setCurrentDate(
-      new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
-    );
+    setMounted(true);
   }, []);
 
-  // Update visible colors when subjects change
-  useEffect(() => {
-    setVisibleColors(
-      subjects
-        .filter((subject) => subject.isActive)
-        .map((subject) => subject.color)
-    );
-  }, [subjects]);
-
-  // Toggle visibility of a color
+  // Add this function that was missing
   const toggleColorVisibility = (color: string) => {
     setVisibleColors((prev) => {
       if (prev.includes(color)) {
@@ -78,18 +63,23 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     });
   };
 
-  // Check if a color is visible - handles undefined colors properly
   const isColorVisible = (color: string | undefined) => {
     if (!color) return true;
     return visibleColors.includes(color);
   };
 
-  // Helper function to compare dates by day/month/year only
   const isSameDay = (date1: Date, date2: Date) => {
+    if (!mounted) {
+      return (
+        date1.getUTCFullYear() === date2.getUTCFullYear() &&
+        date1.getUTCMonth() === date2.getUTCMonth() &&
+        date1.getUTCDate() === date2.getUTCDate()
+      );
+    }
     return (
-      date1.getUTCFullYear() === date2.getUTCFullYear() &&
-      date1.getUTCMonth() === date2.getUTCMonth() &&
-      date1.getUTCDate() === date2.getUTCDate()
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
     );
   };
 
@@ -97,7 +87,7 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     currentDate,
     setCurrentDate,
     visibleColors,
-    toggleColorVisibility,
+    toggleColorVisibility, // ✅ Now this function exists
     isColorVisible,
     subjects,
     setSubjects,

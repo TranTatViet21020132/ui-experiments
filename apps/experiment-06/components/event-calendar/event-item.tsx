@@ -247,6 +247,11 @@ export function EventItem({
         ) : (
           <>
             <div className="truncate font-medium">{event.title}</div>
+            {event.location && (
+              <>
+                <span className="text-xs opacity-70 mb-2">{event.location}</span>
+              </>
+            )}
             {showTime && (
               <div className="truncate font-normal opacity-70 sm:text-xs uppercase">
                 {getEventTime()}
@@ -273,6 +278,8 @@ export function EventItem({
           } as React.CSSProperties;
         })()
       : {};
+
+      console.log(event);
 
   return (
     <button

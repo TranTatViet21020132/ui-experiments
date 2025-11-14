@@ -10,16 +10,23 @@ export async function getAllEvents(): Promise<CalendarEvent[]> {
   const client = await clientPromise;
   const db = client.db(DB_NAME);
 
-  // Optionally filter out events older than 1 day on retrieval
-  // Remove this filter if you want to show all events including those from yesterday
-  const oneDayAgo = subDays(new Date(), 1);
+  const startOfYesterday = new Date();
+  startOfYesterday.setUTCDate(startOfYesterday.getUTCDate() - 1);
+  startOfYesterday.setUTCHours(0, 0, 0, 0);
+
+  // Convert to ISO string since dates are stored as strings in MongoDB
+  const filterDateString = startOfYesterday.toISOString();
+
+  console.log("Filter date string:", filterDateString);
 
   const events = await db
     .collection(COLLECTION_NAME)
     .find({
-      end: { $gte: oneDayAgo }, // Only get events that ended within the last day or are upcoming
+      end: { $gte: filterDateString }, // Compare strings instead of Date objects
     })
     .toArray();
+
+  console.log("Filtered events:", events.length);
 
   return events.map((event) => ({
     id: event._id.toString(),

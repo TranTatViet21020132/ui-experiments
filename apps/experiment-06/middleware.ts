@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
   if (isPublicRoute) {
     // If already authenticated and trying to access login, redirect to calendar
     if (token && pathname === "/login") {
-      return NextResponse.redirect(new URL("/calendar", request.url));
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
   }

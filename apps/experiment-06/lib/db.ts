@@ -16,17 +16,12 @@ export async function getAllEvents(): Promise<CalendarEvent[]> {
 
   // Convert to ISO string since dates are stored as strings in MongoDB
   const filterDateString = startOfYesterday.toISOString();
-
-  console.log("Filter date string:", filterDateString);
-
   const events = await db
     .collection(COLLECTION_NAME)
     .find({
       end: { $gte: filterDateString }, // Compare strings instead of Date objects
     })
     .toArray();
-
-  console.log("Filtered events:", events.length);
 
   return events.map((event) => ({
     id: event._id.toString(),

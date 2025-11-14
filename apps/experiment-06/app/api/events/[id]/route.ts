@@ -47,7 +47,6 @@ export async function DELETE(
 ) {
   try {
     const params = await context.params;
-    console.log("Attempting to delete event with id:", params.id);
     await deleteEvent(params.id);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {

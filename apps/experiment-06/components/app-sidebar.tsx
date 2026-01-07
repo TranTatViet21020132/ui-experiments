@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RiCheckLine } from "@remixicon/react";
 import { useCalendarContext } from "@/components/event-calendar/calendar-context";
 import { useSubjects } from "@/hooks/use-subjects";
+import { useMemo } from "react";
 
 import { NavUser } from "@/components/nav-user";
 import {
@@ -22,6 +23,12 @@ import {
 } from "@/components/ui/sidebar";
 import SidebarCalendar from "@/components/sidebar-calendar";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const data = {
   user: {
@@ -35,6 +42,12 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isColorVisible, toggleColorVisibility } = useCalendarContext();
   const { data: subjects = [], isLoading } = useSubjects();
+
+  const { activeSubjects } = useMemo(() => {
+    return {
+      activeSubjects: subjects,
+    };
+  }, [subjects]);
 
   return (
     <Sidebar
@@ -69,55 +82,75 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup className="px-1">
           <SidebarCalendar />
         </SidebarGroup>
-        <SidebarGroup className="px-1 mt-3 pt-4 border-t">
+        <SidebarGroup className="px-1 mt-3 pt-4 border-t flex-1 min-h-0">
           <SidebarGroupLabel className="uppercase text-muted-foreground/65">
             Calendars
           </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {isLoading ? (
-                <div className="text-muted-foreground text-sm px-2">
-                  Loading subjects...
-                </div>
-              ) : (
-                subjects.map((subject) => (
-                  <SidebarMenuItem key={subject.id}>
-                    <SidebarMenuButton
-                      asChild
-                      className="relative rounded-md [&>svg]:size-auto justify-between has-focus-visible:border-ring has-focus-visible:ring-ring/50 has-focus-visible:ring-[3px]"
-                    >
-                      <span>
-                        <span className="font-medium flex items-center justify-between gap-3">
-                          <Checkbox
-                            id={subject.id}
-                            className="sr-only peer"
-                            checked={isColorVisible(subject.color)}
-                            onCheckedChange={() =>
-                              toggleColorVisibility(subject.color)
-                            }
-                          />
-                          <RiCheckLine
-                            className="peer-not-data-[state=checked]:invisible"
-                            size={16}
-                            aria-hidden="true"
-                          />
-                          <label
-                            htmlFor={subject.id}
-                            className="peer-not-data-[state=checked]:line-through peer-not-data-[state=checked]:text-muted-foreground/65 after:absolute after:inset-0"
-                          >
-                            {subject.name}
-                          </label>
-                        </span>
-                        <span
-                          className="size-1.5 rounded-full"
-                          style={{ backgroundColor: subject.color }}
-                        />
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))
-              )}
-            </SidebarMenu>
+          <SidebarGroupContent className="overflow-y-auto max-h-full">
+            {isLoading ? (
+              <div className="text-muted-foreground text-sm px-2">
+                Loading subjects...
+              </div>
+            ) : subjects.length === 0 ? (
+              <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                No subjects yet. Create events to add subjects.
+              </div>
+            ) : (
+              <>
+                {activeSubjects.length > 0 && (
+                  <TooltipProvider delayDuration={300}>
+                    <SidebarMenu>
+                      {activeSubjects.map((subject) => (
+                        <SidebarMenuItem key={subject.id}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <SidebarMenuButton
+                                asChild
+                                className="relative rounded-md [&>svg]:size-auto justify-between has-focus-visible:border-ring has-focus-visible:ring-ring/50 has-focus-visible:ring-[3px]"
+                              >
+                                <span>
+                                  <span className="font-medium flex items-center justify-start gap-3 flex-1 min-w-0">
+                                    <Checkbox
+                                      id={subject.id}
+                                      className="sr-only peer"
+                                      checked={isColorVisible(subject.color)}
+                                      onCheckedChange={() =>
+                                        toggleColorVisibility(subject.color)
+                                      }
+                                    />
+                                    <RiCheckLine
+                                      className="peer-not-data-[state=checked]:invisible shrink-0"
+                                      size={16}
+                                      aria-hidden="true"
+                                    />
+                                    <label
+                                      htmlFor={subject.id}
+                                      className="peer-not-data-[state=checked]:line-through peer-not-data-[state=checked]:text-muted-foreground/65 after:absolute after:inset-0 truncate"
+                                    >
+                                      {subject.name}
+                                    </label>
+                                  </span>
+                                  <span
+                                    className="size-1.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: subject.color }}
+                                  />
+                                </span>
+                              </SidebarMenuButton>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="right"
+                              className="font-medium"
+                            >
+                              {subject.name}
+                            </TooltipContent>
+                          </Tooltip>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </TooltipProvider>
+                )}
+              </>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

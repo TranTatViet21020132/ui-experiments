@@ -38,7 +38,6 @@ interface CalendarProviderProps {
   children: ReactNode;
 }
 
-// Helper function to normalize date to local midnight
 function getLocalMidnight(date: Date = new Date()): Date {
   const normalized = new Date(date);
   normalized.setHours(0, 0, 0, 0);
@@ -47,17 +46,30 @@ function getLocalMidnight(date: Date = new Date()): Date {
 
 export function CalendarProvider({ children }: CalendarProviderProps) {
   const [mounted, setMounted] = useState(false);
-
-  // Initialize with null to avoid hydration mismatch
   const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [visibleColors, setVisibleColors] = useState<string[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjectsState] = useState<Subject[]>([]);
 
   useEffect(() => {
-    // Set the actual current date only on client side
     setCurrentDate(getLocalMidnight());
     setMounted(true);
   }, []);
+
+  const setSubjects = (newSubjects: Subject[]) => {
+    setSubjectsState(newSubjects);
+
+    // Initialize all subjects as visible
+    const subjectColors = newSubjects.map((s) => s.color);
+    setVisibleColors((prevVisible) => {
+      // If no colors were visible before, show all new subjects
+      if (prevVisible.length === 0) {
+        return subjectColors;
+      }
+      // Otherwise, add any new colors while preserving existing visibility state
+      const combined = [...new Set([...prevVisible, ...subjectColors])];
+      return combined;
+    });
+  };
 
   const toggleColorVisibility = (color: string) => {
     setVisibleColors((prev) => {
@@ -70,7 +82,7 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
   };
 
   const isColorVisible = (color: string | undefined) => {
-    if (!color) return true;
+    if (!color) return false;
     return visibleColors.includes(color);
   };
 
@@ -82,9 +94,8 @@ export function CalendarProvider({ children }: CalendarProviderProps) {
     );
   };
 
-  // Don't render until mounted and currentDate is set
   if (!mounted || !currentDate) {
-    return null; // Or a loading skeleton
+    return null;
   }
 
   const value = {

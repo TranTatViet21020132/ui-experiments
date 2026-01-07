@@ -17,7 +17,7 @@ export async function PUT(
       );
     }
 
-    // Update event with subject field
+    // Update event with ALL fields including recurring fields
     const eventData = {
       id: params.id,
       title: body.title,
@@ -28,6 +28,9 @@ export async function PUT(
       location: body.location || "",
       color: body.color || "#A855F7",
       subject: body.subject || null,
+      // ADD THESE CRITICAL FIELDS:
+      recurringGroupId: body.recurringGroupId || undefined,
+      recurrencePattern: body.recurrencePattern || undefined,
     };
 
     const event = await updateEvent(eventData);

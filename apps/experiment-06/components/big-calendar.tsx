@@ -8,6 +8,9 @@ import {
   useCreateEvent,
   useUpdateEvent,
   useDeleteEvent,
+  useCreateMultipleEvents,
+  useUpdateMultipleEvents,
+  useDeleteMultipleEvents,
 } from "@/hooks/use-events";
 import { useSubjects } from "@/hooks/use-subjects";
 import { toast } from "sonner";
@@ -16,29 +19,29 @@ import { format } from "date-fns";
 export default function BigCalendar() {
   const { isColorVisible, setSubjects } = useCalendarContext();
 
-  // Fetch events and subjects from database
   const {
     data: events = [],
     isLoading: eventsLoading,
     error: eventsError,
   } = useEvents();
   const { data: subjects = [], isLoading: subjectsLoading } = useSubjects();
+
   const createEvent = useCreateEvent();
   const updateEvent = useUpdateEvent();
   const deleteEvent = useDeleteEvent();
+  const createMultipleEvents = useCreateMultipleEvents();
+  const updateMultipleEvents = useUpdateMultipleEvents();
+  const deleteMultipleEvents = useDeleteMultipleEvents();
 
-  // Use ref to prevent infinite loop when initializing subjects
   const subjectsInitialized = useRef(false);
 
   useEffect(() => {
-    // Only initialize subjects once when they're first loaded
     if (subjects.length > 0 && !subjectsInitialized.current) {
       setSubjects(subjects);
       subjectsInitialized.current = true;
     }
   }, [subjects, setSubjects]);
 
-  // Filter events based on visible colors
   const visibleEvents = useMemo(() => {
     return events.filter((event) => isColorVisible(event.color));
   }, [events, isColorVisible]);
@@ -46,16 +49,11 @@ export default function BigCalendar() {
   const handleEventAdd = async (event: CalendarEvent | CalendarEvent[]) => {
     try {
       if (Array.isArray(event)) {
-        // Bulk create for recurring events
-        // All events in the array should already have the correct color from handleSave
-        const results = await Promise.all(
-          event.map((evt) => createEvent.mutateAsync(evt))
-        );
-        toast(`${results.length} recurring events created`, {
+        await createMultipleEvents.mutateAsync(event);
+        toast(`${event.length} recurring events created`, {
           position: "bottom-left",
         });
       } else {
-        // Single event - color should already be set from handleSave
         await createEvent.mutateAsync(event);
         toast(`Event "${event.title}" added`, {
           description: format(new Date(event.start), "MMM d, yyyy"),
@@ -67,30 +65,59 @@ export default function BigCalendar() {
       toast.error("Failed to create event");
     }
   };
-  
-  const handleEventUpdate = async (updatedEvent: CalendarEvent) => {
+
+  const handleEventUpdate = async (
+    updatedEvent: CalendarEvent | CalendarEvent[]
+  ) => {
     try {
-      await updateEvent.mutateAsync(updatedEvent);
-      toast(`Event "${updatedEvent.title}" updated`, {
-        description: format(new Date(updatedEvent.start), "MMM d, yyyy"),
-        position: "bottom-left",
-      });
-    } catch {
+      if (Array.isArray(updatedEvent)) {
+        await updateMultipleEvents.mutateAsync(updatedEvent);
+        toast(`${updatedEvent.length} events updated`, {
+          position: "bottom-left",
+        });
+      } else {
+        await updateEvent.mutateAsync(updatedEvent);
+        toast(`Event "${updatedEvent.title}" updated`, {
+          description: format(new Date(updatedEvent.start), "MMM d, yyyy"),
+          position: "bottom-left",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to update event:", error);
       toast.error("Failed to update event");
     }
   };
 
-  const handleEventDelete = async (eventId: string) => {
+  const handleEventDelete = async (eventId: string | string[]) => {
     try {
-      const deletedEvent = events.find((e) => e.id === eventId);
-      await deleteEvent.mutateAsync(eventId);
-      if (deletedEvent) {
-        toast(`Event "${deletedEvent.title}" deleted`, {
-          description: format(new Date(deletedEvent.start), "MMM d, yyyy"),
-          position: "bottom-left",
-        });
+      if (Array.isArray(eventId)) {
+        const deletedEvents = events.filter((e) => eventId.includes(e.id));
+        await deleteMultipleEvents.mutateAsync(eventId);
+
+        if (deletedEvents.length > 0) {
+          const firstEvent = deletedEvents[0];
+          const lastEvent = deletedEvents[deletedEvents.length - 1];
+
+          if (firstEvent && lastEvent) {
+            toast(`${deletedEvents.length} events deleted`, {
+              description: `From ${format(new Date(firstEvent.start), "MMM d")} to ${format(new Date(lastEvent.start), "MMM d")}`,
+              position: "bottom-left",
+            });
+          }
+        }
+      } else {
+        const deletedEvent = events.find((e) => e.id === eventId);
+        await deleteEvent.mutateAsync(eventId);
+
+        if (deletedEvent) {
+          toast(`Event "${deletedEvent.title}" deleted`, {
+            description: format(new Date(deletedEvent.start), "MMM d, yyyy"),
+            position: "bottom-left",
+          });
+        }
       }
-    } catch {
+    } catch (error) {
+      console.error("Failed to delete event:", error);
       toast.error("Failed to delete event");
     }
   };

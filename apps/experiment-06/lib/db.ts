@@ -1,3 +1,4 @@
+// lib/db.ts - Updated version with recurring event support
 import clientPromise from "./mongodb";
 import type { CalendarEvent } from "@/components/event-calendar";
 import { ObjectId } from "mongodb";
@@ -14,12 +15,11 @@ export async function getAllEvents(): Promise<CalendarEvent[]> {
   startOfYesterday.setUTCDate(startOfYesterday.getUTCDate() - 1);
   startOfYesterday.setUTCHours(0, 0, 0, 0);
 
-  // Convert to ISO string since dates are stored as strings in MongoDB
   const filterDateString = startOfYesterday.toISOString();
   const events = await db
     .collection(COLLECTION_NAME)
     .find({
-      end: { $gte: filterDateString }, // Compare strings instead of Date objects
+      end: { $gte: filterDateString },
     })
     .toArray();
 
@@ -32,6 +32,9 @@ export async function getAllEvents(): Promise<CalendarEvent[]> {
     allDay: event.allDay || false,
     color: event.color,
     location: event.location || "",
+    subject: event.subject || null,
+    recurringGroupId: event.recurringGroupId || undefined,
+    recurrencePattern: event.recurrencePattern || undefined,
   }));
 }
 
@@ -51,8 +54,10 @@ export async function createEvent(
     color: event.color,
     label: event.label,
     location: event.location,
+    subject: event.subject,
+    recurringGroupId: event.recurringGroupId || null,
+    recurrencePattern: event.recurrencePattern || null,
     createdAt: new Date(),
-    subject: event.subject
   });
 
   return {
@@ -82,6 +87,9 @@ export async function updateEvent(
         color: event.color,
         label: event.label,
         location: event.location,
+        subject: event.subject,
+        recurringGroupId: event.recurringGroupId || null,
+        recurrencePattern: event.recurrencePattern || null,
         updatedAt: new Date(),
       },
     }
@@ -107,11 +115,63 @@ export async function deleteEvent(id: string): Promise<void> {
   }
 }
 
+// New function: Delete multiple events by IDs
+export async function deleteMultipleEvents(ids: string[]): Promise<number> {
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+
+  const objectIds = ids
+    .filter((id) => ObjectId.isValid(id))
+    .map((id) => new ObjectId(id));
+
+  const result = await db.collection(COLLECTION_NAME).deleteMany({
+    _id: { $in: objectIds },
+  });
+
+  return result.deletedCount;
+}
+
+// New function: Update multiple events at once
+export async function updateMultipleEvents(
+  events: CalendarEvent[]
+): Promise<void> {
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+
+  const bulkOps = events.map((event) => ({
+    updateOne: {
+      filter: { _id: new ObjectId(event.id) },
+      update: {
+        $set: {
+          title: event.title,
+          description: event.description,
+          start:
+            event.start instanceof Date
+              ? event.start.toISOString()
+              : event.start,
+          end: event.end instanceof Date ? event.end.toISOString() : event.end,
+          allDay: event.allDay,
+          color: event.color,
+          label: event.label,
+          location: event.location,
+          subject: event.subject,
+          recurringGroupId: event.recurringGroupId || null,
+          recurrencePattern: event.recurrencePattern || null,
+          updatedAt: new Date(),
+        },
+      },
+    },
+  }));
+
+  if (bulkOps.length > 0) {
+    await db.collection(COLLECTION_NAME).bulkWrite(bulkOps);
+  }
+}
+
 export async function deleteOldEvents(): Promise<number> {
   const client = await clientPromise;
   const db = client.db(DB_NAME);
 
-  // Delete events that ended more than 1 day ago
   const oneDayAgo = subDays(new Date(), 1);
 
   const result = await db.collection(COLLECTION_NAME).deleteMany({

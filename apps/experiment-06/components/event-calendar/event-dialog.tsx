@@ -1,10 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect, useState, useCallback, memo, useMemo } from "react";
 import { RiCalendarLine, RiDeleteBinLine } from "@remixicon/react";
 import { format, isBefore, addDays } from "date-fns";
 
-import type { CalendarEvent, EventColor } from "@/components/event-calendar";
+import { applyChangesToEvents, generateRecurringGroupId, getEventsToUpdate, isRecurringEvent, type CalendarEvent, type EventColor } from "@/components/event-calendar";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -44,15 +45,19 @@ import {
   useDeleteSubject,
   useSubjects,
 } from "@/hooks/use-subjects";
-import { Plus, X, Check } from "lucide-react";
+import { Plus, X, Check, AlertCircle } from "lucide-react";
 
 interface EventDialogProps {
   event: CalendarEvent | null;
   isOpen: boolean;
   onClose: () => void;
   onSave: (event: CalendarEvent | CalendarEvent[]) => void;
-  onDelete: (eventId: string) => void;
+  onDelete: (eventId: string | string[]) => void;
+  allEvents?: CalendarEvent[]; // Pass all events for recurring detection
 }
+
+
+type RecurringEditScope = "this-event" | "all-future" | "all-events";
 
 // Constants
 const PRESET_COLORS = [
@@ -326,7 +331,6 @@ const SubjectManager = memo(
     onSubjectChange,
     onDeleteSubject,
   }: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     subjects: any[];
     selectedSubjectId: string | null;
     onSubjectChange: (subjectId: string, color: string) => void;
@@ -384,6 +388,7 @@ export function EventDialog({
   onClose,
   onSave,
   onDelete,
+  allEvents = [],
 }: EventDialogProps) {
   // Form state
   const [title, setTitle] = useState("");
@@ -420,6 +425,18 @@ export function EventDialog({
   const { data: subjects = [] } = useSubjects();
   const createSubject = useCreateSubject();
   const deleteSubject = useDeleteSubject();
+
+  const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+  const [recurringEditScope, setRecurringEditScope] =
+    useState<RecurringEditScope>("this-event");
+  const [isDeleteAction, setIsDeleteAction] = useState(false);
+  const [pendingChanges, setPendingChanges] =
+    useState<Partial<CalendarEvent> | null>(null);
+
+  // Check if editing a recurring event
+  const isEditingRecurring = useMemo(() => {
+    return !!(event?.id && (event.recurringGroupId || event.recurrencePattern));
+  }, [event]);
 
   // Memoized initial state
   const initialState = useMemo(
@@ -544,6 +561,8 @@ export function EventDialog({
             location,
             color: finalColor,
             subject: finalSubjectId,
+            // Don't add recurringGroupId or recurrencePattern here
+            // They will be added in handleSave
           });
         }
 
@@ -571,13 +590,11 @@ export function EventDialog({
         end = createDateWithTime(endDate, endTime);
       }
 
-      // Validate dates
       if (isBefore(end, start)) {
         setError("End date cannot be before start date");
         return;
       }
 
-      // Determine subject and color
       let finalSubjectId = subjectId;
       let finalColor = color;
 
@@ -587,25 +604,48 @@ export function EventDialog({
         finalColor = otherSubject.color;
       }
 
-      // Get subject name for title if needed
       const selectedSubject = subjects.find((s) => s.id === finalSubjectId);
       const eventTitle =
         title.trim() || selectedSubject?.name || "Untitled Event";
 
-      // Handle recurring events
+      // Creating new recurring events
       if (isRecurring && selectedDays.length > 0 && recurrenceEndDate) {
+        const recurringGroupId = generateRecurringGroupId();
+        const durationMinutes = parseInt(duration);
+
+        // CRITICAL: Create recurrence pattern object
+        const recurrencePattern = {
+          frequency: "weekly" as const,
+          interval: 1,
+          daysOfWeek: [...selectedDays],
+          endDate: recurrenceEndDate,
+          startTime: formatTimeForInput(start),
+          duration: durationMinutes,
+        };
+
         const events = generateRecurringEvents(
           start,
-          parseInt(duration),
+          durationMinutes,
           eventTitle,
           finalColor,
           finalSubjectId!
         );
-        onSave(events as CalendarEvent[]);
-      } else {
-        // Single event
-        onSave({
-          id: event?.id || "",
+
+        // Add recurringGroupId AND recurrencePattern to all events
+        const eventsWithGroupId = events.map((evt) => ({
+          ...evt,
+          recurringGroupId,
+          recurrencePattern, // Add this!
+        })) as CalendarEvent[];
+
+        onSave(eventsWithGroupId);
+        onClose();
+        return;
+      }
+
+      // Editing existing recurring event
+      if (event?.id && isEditingRecurring) {
+        const changes: Partial<CalendarEvent> = {
           title: eventTitle,
           description,
           start,
@@ -614,8 +654,28 @@ export function EventDialog({
           location,
           color: finalColor,
           subject: finalSubjectId || undefined,
-        });
+        };
+
+        setPendingChanges(changes);
+        setShowRecurringDialog(true);
+        setIsDeleteAction(false);
+        return;
       }
+
+      // Single event (new or edit)
+      onSave({
+        id: event?.id || "",
+        title: eventTitle,
+        description,
+        start,
+        end,
+        allDay,
+        location,
+        color: finalColor,
+        subject: finalSubjectId || undefined,
+        recurringGroupId: event?.recurringGroupId,
+        recurrencePattern: event?.recurrencePattern,
+      });
 
       onClose();
     } catch (err) {
@@ -625,32 +685,100 @@ export function EventDialog({
   }, [
     startDate,
     startTime,
-    endDate,
-    endTime,
     allDay,
     isRecurring,
-    duration,
-    title,
-    description,
-    location,
-    color,
     subjectId,
-    event?.id,
+    color,
+    subjects,
+    title,
     selectedDays,
     recurrenceEndDate,
-    subjects,
+    event?.id,
+    event?.recurringGroupId,
+    event?.recurrencePattern,
+    isEditingRecurring,
+    onSave,
+    description,
+    location,
+    onClose,
+    endDate,
+    duration,
+    endTime,
     ensureOtherSubject,
     generateRecurringEvents,
-    onSave,
-    onClose,
   ]);
 
+  // Handle recurring event edit confirmation
+  const handleRecurringEditConfirm = useCallback(() => {
+    if (!event || !pendingChanges) return;
+
+    const eventsToUpdate = getEventsToUpdate(
+      allEvents,
+      event,
+      recurringEditScope
+    );
+    const updatedEvents = applyChangesToEvents(eventsToUpdate, pendingChanges);
+
+    // Save all updated events
+    onSave(updatedEvents);
+
+    setShowRecurringDialog(false);
+    setPendingChanges(null);
+    onClose();
+  }, [event, pendingChanges, recurringEditScope, allEvents, onSave, onClose]);
+
+  // Modified handleDelete to check for recurring events
   const handleDelete = useCallback(() => {
-    if (event?.id) {
-      onDelete(event.id);
-      onClose();
+    if (!event?.id) return;
+
+    if (isEditingRecurring) {
+      setShowRecurringDialog(true);
+      setIsDeleteAction(true);
+      return;
     }
-  }, [event?.id, onDelete, onClose]);
+
+    onDelete(event.id);
+    onClose();
+  }, [event?.id, isEditingRecurring, onDelete, onClose]);
+
+  // Handle recurring event delete confirmation
+  const handleRecurringDeleteConfirm = useCallback(() => {
+    if (!event) return;
+
+    const eventsToDelete = getEventsToUpdate(
+      allEvents,
+      event,
+      recurringEditScope
+    );
+    const idsToDelete = eventsToDelete.map((e) => e.id);
+
+    onDelete(idsToDelete);
+
+    setShowRecurringDialog(false);
+    onClose();
+  }, [event, recurringEditScope, allEvents, onDelete, onClose]);
+
+  // Render recurring event warning/info
+  const renderRecurringInfo = () => {
+    if (!event?.id || !isEditingRecurring) return null;
+
+    const groupEvents = allEvents.filter(
+      (e) => e.recurringGroupId === event.recurringGroupId
+    );
+
+    return (
+      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/30 rounded-md p-3 flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+        <div className="text-sm text-blue-900 dark:text-blue-100">
+          <p className="font-medium">Recurring Event</p>
+          <p className="text-blue-700 dark:text-blue-300 mt-0.5">
+            This event is part of a series with {groupEvents.length}{" "}
+            occurrences. Changes will apply based on your selection.
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   const handleStartDateChange = useCallback(
     (date: Date) => {
@@ -727,285 +855,389 @@ export function EventDialog({
   }, []);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{event?.id ? "Edit Event" : "Create Event"}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {event?.id
-              ? "Edit the details of this event"
-              : "Add a new event to your calendar"}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {event?.id ? "Edit Event" : "Create Event"}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              {event?.id
+                ? "Edit the details of this event"
+                : "Add a new event to your calendar"}
+            </DialogDescription>
+          </DialogHeader>
 
-        {error && (
-          <div className="bg-destructive/15 text-destructive rounded-md px-3 py-2 text-sm">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="bg-destructive/15 text-destructive rounded-md px-3 py-2 text-sm">
+              {error}
+            </div>
+          )}
 
-        <div className="grid gap-4 py-4">
-          {/* Subject Management */}
-          <fieldset className="space-y-3">
-            <div className="flex items-center justify-between">
-              <legend className="text-foreground text-sm leading-none font-medium">
-                Subject
-              </legend>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsAddingSubject(true)}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Subject
-              </Button>
+          {renderRecurringInfo()}
+
+          <div className="grid gap-4 py-4">
+            {/* Subject Management */}
+            <fieldset className="space-y-3">
+              <div className="flex items-center justify-between">
+                <legend className="text-foreground text-sm leading-none font-medium">
+                  Subject
+                </legend>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsAddingSubject(true)}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Subject
+                </Button>
+              </div>
+
+              {isAddingSubject && (
+                <div className="space-y-3 p-3 border rounded-md bg-muted/30">
+                  <Input
+                    placeholder="Subject name (e.g., Mathematics)"
+                    value={newSubjectName}
+                    onChange={(e) => setNewSubjectName(e.target.value)}
+                  />
+                  <ColorPicker
+                    selectedColor={newSubjectColor}
+                    onColorChange={setNewSubjectColor}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleAddSubject}
+                      className="flex-1"
+                    >
+                      Add Subject
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCancelAddSubject}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <SubjectManager
+                subjects={subjects}
+                selectedSubjectId={subjectId}
+                onSubjectChange={handleSubjectChange}
+                onDeleteSubject={handleDeleteSubject}
+              />
+            </fieldset>
+
+            {/* Title */}
+            <div className="*:not-first:mt-1.5">
+              <Label htmlFor="title" className="flex items-center gap-2">
+                Title
+                <span className="text-xs text-muted-foreground font-normal">
+                  (optional - uses subject name if empty)
+                </span>
+              </Label>
+              <Input
+                id="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Enter event title"
+              />
             </div>
 
-            {isAddingSubject && (
-              <div className="space-y-3 p-3 border rounded-md bg-muted/30">
-                <Input
-                  placeholder="Subject name (e.g., Mathematics)"
-                  value={newSubjectName}
-                  onChange={(e) => setNewSubjectName(e.target.value)}
-                />
-                <ColorPicker
-                  selectedColor={newSubjectColor}
-                  onColorChange={setNewSubjectColor}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleAddSubject}
-                    className="flex-1"
-                  >
-                    Add Subject
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCancelAddSubject}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <SubjectManager
-              subjects={subjects}
-              selectedSubjectId={subjectId}
-              onSubjectChange={handleSubjectChange}
-              onDeleteSubject={handleDeleteSubject}
-            />
-          </fieldset>
-
-          {/* Title */}
-          <div className="*:not-first:mt-1.5">
-            <Label htmlFor="title" className="flex items-center gap-2">
-              Title
-              <span className="text-xs text-muted-foreground font-normal">
-                (optional - uses subject name if empty)
-              </span>
-            </Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter event title"
-            />
-          </div>
-
-          {/* Description */}
-          <div className="*:not-first:mt-1.5">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              placeholder="Add event details..."
-            />
-          </div>
-
-          {/* Start Date/Time */}
-          <div className="flex gap-4">
-            <DatePicker
-              id="start-date"
-              label="Start Date"
-              date={startDate}
-              onDateChange={handleStartDateChange}
-              open={startDateOpen}
-              onOpenChange={setStartDateOpen}
-            />
-            {!allDay && (
-              <TimeSelect
-                id="start-time"
-                label="Start Time"
-                value={startTime}
-                onChange={setStartTime}
+            {/* Description */}
+            <div className="*:not-first:mt-1.5">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="Add event details..."
               />
-            )}
-          </div>
+            </div>
 
-          {/* End Date/Time OR Duration */}
-          {!isRecurring && (
+            {/* Start Date/Time */}
             <div className="flex gap-4">
               <DatePicker
-                id="end-date"
-                label="End Date"
-                date={endDate}
-                onDateChange={handleEndDateChange}
-                disabled={{ before: startDate }}
-                open={endDateOpen}
-                onOpenChange={setEndDateOpen}
+                id="start-date"
+                label="Start Date"
+                date={startDate}
+                onDateChange={handleStartDateChange}
+                open={startDateOpen}
+                onOpenChange={setStartDateOpen}
               />
               {!allDay && (
                 <TimeSelect
-                  id="end-time"
-                  label="End Time"
-                  value={endTime}
-                  onChange={setEndTime}
+                  id="start-time"
+                  label="Start Time"
+                  value={startTime}
+                  onChange={setStartTime}
                 />
               )}
             </div>
-          )}
 
-          {isRecurring && !allDay && (
-            <div className="*:not-first:mt-1.5">
-              <Label htmlFor="duration">Duration</Label>
-              <Select value={duration} onValueChange={setDuration}>
-                <SelectTrigger id="duration">
-                  <SelectValue placeholder="Select duration" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DURATION_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* All day checkbox */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="all-day"
-              checked={allDay}
-              onCheckedChange={(checked) => setAllDay(checked === true)}
-            />
-            <Label htmlFor="all-day">All day</Label>
-          </div>
-
-          {/* Location */}
-          <div className="*:not-first:mt-1.5">
-            <Label htmlFor="location">Location</Label>
-            <Input
-              id="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Add location"
-            />
-          </div>
-
-          {/* Recurring Event Section */}
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="recurring"
-                checked={isRecurring}
-                onCheckedChange={(checked) =>
-                  setIsRecurring(checked as boolean)
-                }
-              />
-              <Label htmlFor="recurring">Repeat weekly</Label>
-            </div>
-
-            {isRecurring && (
-              <>
-                <div className="space-y-2 mt-2">
-                  <Label>Repeat on</Label>
-                  <DaySelector
-                    selectedDays={selectedDays}
-                    onToggleDay={handleToggleDay}
+            {/* End Date/Time OR Duration */}
+            {!isRecurring && (
+              <div className="flex gap-4">
+                <DatePicker
+                  id="end-date"
+                  label="End Date"
+                  date={endDate}
+                  onDateChange={handleEndDateChange}
+                  disabled={{ before: startDate }}
+                  open={endDateOpen}
+                  onOpenChange={setEndDateOpen}
+                />
+                {!allDay && (
+                  <TimeSelect
+                    id="end-time"
+                    label="End Time"
+                    value={endTime}
+                    onChange={setEndTime}
                   />
-                </div>
+                )}
+              </div>
+            )}
 
-                <div className="flex-1 *:not-first:mt-1.5">
-                  <Label htmlFor="recurrence-end-date">Repeat until</Label>
-                  <Popover
-                    open={recurrenceEndDateOpen}
-                    onOpenChange={setRecurrenceEndDateOpen}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        id="recurrence-end-date"
-                        variant="outline"
-                        className={cn(
-                          "group bg-background hover:bg-background border-input w-full justify-between px-3 font-normal outline-offset-0 outline-none focus-visible:outline-[3px]",
-                          !recurrenceEndDate && "text-muted-foreground"
-                        )}
-                      >
-                        <span
+            {isRecurring && !allDay && (
+              <div className="*:not-first:mt-1.5">
+                <Label htmlFor="duration">Duration</Label>
+                <Select value={duration} onValueChange={setDuration}>
+                  <SelectTrigger id="duration">
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DURATION_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* All day checkbox */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="all-day"
+                checked={allDay}
+                onCheckedChange={(checked) => setAllDay(checked === true)}
+              />
+              <Label htmlFor="all-day">All day</Label>
+            </div>
+
+            {/* Location */}
+            <div className="*:not-first:mt-1.5">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Add location"
+              />
+            </div>
+
+            {/* Recurring Event Section */}
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="recurring"
+                  checked={isRecurring}
+                  onCheckedChange={(checked) =>
+                    setIsRecurring(checked as boolean)
+                  }
+                />
+                <Label htmlFor="recurring">Repeat weekly</Label>
+              </div>
+
+              {isRecurring && (
+                <>
+                  <div className="space-y-2 mt-2">
+                    <Label>Repeat on</Label>
+                    <DaySelector
+                      selectedDays={selectedDays}
+                      onToggleDay={handleToggleDay}
+                    />
+                  </div>
+
+                  <div className="flex-1 *:not-first:mt-1.5">
+                    <Label htmlFor="recurrence-end-date">Repeat until</Label>
+                    <Popover
+                      open={recurrenceEndDateOpen}
+                      onOpenChange={setRecurrenceEndDateOpen}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          id="recurrence-end-date"
+                          variant="outline"
                           className={cn(
-                            "truncate",
+                            "group bg-background hover:bg-background border-input w-full justify-between px-3 font-normal outline-offset-0 outline-none focus-visible:outline-[3px]",
                             !recurrenceEndDate && "text-muted-foreground"
                           )}
                         >
-                          {recurrenceEndDate
-                            ? format(recurrenceEndDate, "PPP")
-                            : "Pick end date"}
-                        </span>
-                        <RiCalendarLine
-                          size={16}
-                          className="text-muted-foreground/80 shrink-0"
-                          aria-hidden="true"
+                          <span
+                            className={cn(
+                              "truncate",
+                              !recurrenceEndDate && "text-muted-foreground"
+                            )}
+                          >
+                            {recurrenceEndDate
+                              ? format(recurrenceEndDate, "PPP")
+                              : "Pick end date"}
+                          </span>
+                          <RiCalendarLine
+                            size={16}
+                            className="text-muted-foreground/80 shrink-0"
+                            aria-hidden="true"
+                          />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-2" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={recurrenceEndDate}
+                          defaultMonth={recurrenceEndDate || startDate}
+                          disabled={{ before: startDate }}
+                          onSelect={(selectedDate) => {
+                            if (selectedDate) {
+                              setRecurrenceEndDate(selectedDate);
+                              setRecurrenceEndDateOpen(false);
+                            }
+                          }}
                         />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-2" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={recurrenceEndDate}
-                        defaultMonth={recurrenceEndDate || startDate}
-                        disabled={{ before: startDate }}
-                        onSelect={(selectedDate) => {
-                          if (selectedDate) {
-                            setRecurrenceEndDate(selectedDate);
-                            setRecurrenceEndDateOpen(false);
-                          }
-                        }}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </>
-            )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
 
-        <DialogFooter className="flex-row sm:justify-between">
-          {event?.id && (
+          <DialogFooter className="flex-row sm:justify-between">
+            {event?.id && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                size="icon"
+                onClick={handleDelete}
+                aria-label="Delete event"
+              >
+                <RiDeleteBinLine size={16} aria-hidden="true" />
+              </Button>
+            )}
+            <div className="flex flex-1 justify-end gap-2">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave}>Save</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recurring Event Edit/Delete Dialog */}
+      <Dialog open={showRecurringDialog} onOpenChange={setShowRecurringDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isDeleteAction ? "Delete" : "Edit"} Recurring Event
+            </DialogTitle>
+            <DialogDescription>
+              This event is part of a recurring series. How would you like to{" "}
+              {isDeleteAction ? "delete" : "update"} it?
+            </DialogDescription>
+          </DialogHeader>
+
+          <RadioGroup
+            value={recurringEditScope}
+            onValueChange={(value: any) => setRecurringEditScope(value)}
+            className="space-y-4 py-4"
+          >
+            <div className="flex items-start space-x-3">
+              <RadioGroupItem
+                value="this-event"
+                id="this-event-scope"
+                className="mt-0.5"
+              />
+              <div className="flex flex-col">
+                <Label
+                  htmlFor="this-event-scope"
+                  className="font-medium cursor-pointer"
+                >
+                  This event only
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Only {isDeleteAction ? "delete" : "change"} this occurrence
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-3">
+              <RadioGroupItem
+                value="all-future"
+                id="all-future-scope"
+                className="mt-0.5"
+              />
+              <div className="flex flex-col">
+                <Label
+                  htmlFor="all-future-scope"
+                  className="font-medium cursor-pointer"
+                >
+                  This and future events
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {isDeleteAction ? "Delete" : "Change"} this and all future
+                  occurrences
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-3">
+              <RadioGroupItem
+                value="all-events"
+                id="all-events-scope"
+                className="mt-0.5"
+              />
+              <div className="flex flex-col">
+                <Label
+                  htmlFor="all-events-scope"
+                  className="font-medium cursor-pointer"
+                >
+                  All events in series
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {isDeleteAction ? "Delete" : "Change"} every occurrence in
+                  this recurring series
+                </p>
+              </div>
+            </div>
+          </RadioGroup>
+
+          <DialogFooter>
             <Button
               variant="outline"
-              className="text-destructive hover:text-destructive"
-              size="icon"
-              onClick={handleDelete}
-              aria-label="Delete event"
+              onClick={() => setShowRecurringDialog(false)}
             >
-              <RiDeleteBinLine size={16} aria-hidden="true" />
-            </Button>
-          )}
-          <div className="flex flex-1 justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save</Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button
+              onClick={
+                isDeleteAction
+                  ? handleRecurringDeleteConfirm
+                  : handleRecurringEditConfirm
+              }
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

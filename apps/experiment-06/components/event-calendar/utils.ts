@@ -1,6 +1,8 @@
-import { isSameDay } from "date-fns";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// components/event-calendar/recurring-utils.ts
+import { CalendarEvent, EventColor } from "@/components/event-calendar/types";
+import { isBefore, isAfter, differenceInMinutes, isSameDay } from "date-fns";
 
-import type { CalendarEvent, EventColor } from "@/components/event-calendar";
 
 /**
  * Get CSS classes for event colors
@@ -147,4 +149,147 @@ export function addHoursToDate(date: Date, hours: number): Date {
   const result = new Date(date);
   result.setHours(result.getHours() + hours);
   return result;
+}
+
+/**
+ * Generates a unique ID for a recurring event group
+ */
+export function generateRecurringGroupId(): string {
+  return `recurring-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+}
+
+/**
+ * Checks if an event is part of a recurring series
+ */
+export function isRecurringEvent(event: CalendarEvent): boolean {
+  return !!event.recurringGroupId;
+}
+
+/**
+ * Finds all events in the same recurring group
+ */
+export function getRecurringGroupEvents(
+  events: CalendarEvent[],
+  recurringGroupId: string
+): CalendarEvent[] {
+  return events
+    .filter(event => event.recurringGroupId === recurringGroupId)
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+}
+
+/**
+ * Finds events that match the pattern (same time period, title, and day of week)
+ * Used when recurringGroupId is missing but events appear to be recurring
+ */
+export function findMatchingRecurringEvents(
+  events: CalendarEvent[],
+  targetEvent: CalendarEvent,
+  withinDays: number = 90
+): CalendarEvent[] {
+  const targetDuration = differenceInMinutes(
+    new Date(targetEvent.end),
+    new Date(targetEvent.start)
+  );
+  const targetStartTime = new Date(targetEvent.start).toTimeString().substring(0, 5);
+  const targetDayOfWeek = new Date(targetEvent.start).getDay();
+  
+  const searchStartDate = new Date(targetEvent.start);
+  searchStartDate.setDate(searchStartDate.getDate() - withinDays);
+  
+  const searchEndDate = new Date(targetEvent.start);
+  searchEndDate.setDate(searchEndDate.getDate() + withinDays);
+
+  return events.filter(event => {
+    if (event.id === targetEvent.id) return false;
+    
+    const eventStart = new Date(event.start);
+    const eventDuration = differenceInMinutes(new Date(event.end), eventStart);
+    const eventStartTime = eventStart.toTimeString().substring(0, 5);
+    const eventDayOfWeek = eventStart.getDay();
+    
+    if (isBefore(eventStart, searchStartDate) || isAfter(eventStart, searchEndDate)) {
+      return false;
+    }
+    
+    return (
+      eventDuration === targetDuration &&
+      eventStartTime === targetStartTime &&
+      eventDayOfWeek === targetDayOfWeek &&
+      event.title === targetEvent.title &&
+      event.subject === targetEvent.subject
+    );
+  });
+}
+
+/**
+ * Gets events to update based on the edit scope
+ */
+export function getEventsToUpdate(
+  allEvents: CalendarEvent[],
+  targetEvent: CalendarEvent,
+  scope: 'this-event' | 'all-future' | 'all-events'
+): CalendarEvent[] {
+  if (scope === 'this-event') {
+    return [targetEvent];
+  }
+
+  const recurringGroupId = targetEvent.recurringGroupId;
+  let groupEvents: CalendarEvent[];
+  
+  if (!recurringGroupId) {
+    // Try to find matching events by pattern
+    const matchingEvents = findMatchingRecurringEvents(allEvents, targetEvent);
+    groupEvents = [targetEvent, ...matchingEvents];
+  } else {
+    // Use recurring group
+    groupEvents = getRecurringGroupEvents(allEvents, recurringGroupId);
+  }
+
+  if (scope === 'all-events') {
+    return groupEvents;
+  }
+
+  // For 'all-future'
+  const targetDate = new Date(targetEvent.start);
+  return groupEvents.filter(event => 
+    !isBefore(new Date(event.start), targetDate)
+  );
+}
+
+/**
+ * Applies changes to multiple events while preserving their individual dates
+ */
+export function applyChangesToEvents(
+  eventsToUpdate: CalendarEvent[],
+  changes: Partial<CalendarEvent>
+): CalendarEvent[] {
+  return eventsToUpdate.map(event => {
+    const updatedEvent = { ...event };
+    
+    // Apply all changes except start/end times
+    Object.keys(changes).forEach(key => {
+      if (key !== 'start' && key !== 'end' && key !== 'id') {
+        (updatedEvent as any)[key] = (changes as any)[key];
+      }
+    });
+    
+    // If time is being changed, update duration but keep original dates
+    if (changes.start && changes.end) {
+      const originalStart = new Date(event.start);
+      const newStartTime = new Date(changes.start);
+      const newEndTime = new Date(changes.end);
+      
+      // Preserve the date, update the time
+      const updatedStart = new Date(originalStart);
+      updatedStart.setHours(newStartTime.getHours(), newStartTime.getMinutes(), 0, 0);
+      
+      const duration = differenceInMinutes(newEndTime, newStartTime);
+      const updatedEnd = new Date(updatedStart.getTime() + duration * 60000);
+      
+      updatedEvent.start = updatedStart;
+      updatedEvent.end = updatedEnd;
+    }
+    
+    return updatedEvent;
+  });
 }

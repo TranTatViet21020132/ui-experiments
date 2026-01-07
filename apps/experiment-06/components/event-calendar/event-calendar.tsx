@@ -49,9 +49,9 @@ import ThemeToggle from "@/components/theme-toggle";
 
 export interface EventCalendarProps {
   events?: CalendarEvent[];
-  onEventAdd?: (event: CalendarEvent) => void;
-  onEventUpdate?: (event: CalendarEvent) => void;
-  onEventDelete?: (eventId: string) => void;
+  onEventAdd?: (event: CalendarEvent | CalendarEvent[]) => void; // CHANGED
+  onEventUpdate?: (event: CalendarEvent | CalendarEvent[]) => void; // CHANGED
+  onEventDelete?: (eventId: string | string[]) => void; // CHANGED
   className?: string;
   initialView?: CalendarView;
 }
@@ -175,18 +175,20 @@ export function EventCalendar({
 
   const handleEventSave = (event: CalendarEvent | CalendarEvent[]) => {
     if (Array.isArray(event)) {
-      // Handle recurring events (array of events)
-      event.forEach((evt) => {
-        onEventAdd?.({
+      const hasExistingIds = event.some((e) => e.id && e.id !== "");
+
+      if (hasExistingIds) {
+        onEventUpdate?.(event);
+      } else {
+        const eventsWithIds = event.map((evt) => ({
           ...evt,
           id: Math.random().toString(36).substring(2, 11),
-        });
-      });
-    } else if (event.id) {
-      // Update existing event
+        }));
+        onEventAdd?.(eventsWithIds);
+      }
+    } else if (event.id && event.id !== "") {
       onEventUpdate?.(event);
     } else {
-      // Single new event
       onEventAdd?.({
         ...event,
         id: Math.random().toString(36).substring(2, 11),
@@ -196,8 +198,12 @@ export function EventCalendar({
     setSelectedEvent(null);
   };
 
-  const handleEventDelete = (eventId: string) => {
-    onEventDelete?.(eventId);
+  const handleEventDelete = (eventId: string | string[]) => {
+    if (Array.isArray(eventId)) {
+      eventId.forEach((id) => onEventDelete?.(id));
+    } else {
+      onEventDelete?.(eventId);
+    }
     setIsEventDialogOpen(false);
     setSelectedEvent(null);
   };
@@ -267,7 +273,7 @@ export function EventCalendar({
         <div
           className={cn(
             "flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-5 sm:px-4",
-            className,
+            className
           )}
         >
           <div className="flex sm:flex-col max-sm:items-center justify-between gap-1.5">
@@ -400,6 +406,7 @@ export function EventCalendar({
           }}
           onSave={handleEventSave}
           onDelete={handleEventDelete}
+          allEvents={events}
         />
       </CalendarDndProvider>
     </div>

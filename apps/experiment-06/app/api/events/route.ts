@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create event with subject field
+    // Create event with ALL fields including recurring fields
     const eventData = {
       title: body.title,
       description: body.description || "",
@@ -34,7 +34,10 @@ export async function POST(request: Request) {
       allDay: body.allDay || false,
       location: body.location || "",
       color: body.color || "#A855F7",
-      subject: body.subject || null, // Add subject field
+      subject: body.subject || null,
+      // ADD THESE CRITICAL FIELDS:
+      recurringGroupId: body.recurringGroupId || undefined,
+      recurrencePattern: body.recurrencePattern || undefined,
     };
 
     const event = await createEvent(eventData);
